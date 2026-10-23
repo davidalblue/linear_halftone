@@ -27,7 +27,7 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random.
-- **Export**: PNG, SVG (one path per line) and video. Pick a canvas size first to export at that size.
+- **Export**: PNG, SVG (one path per line) and video. **Copy Settings** copies every setting as text. Pick a canvas size first to export at that size.
 
 ## Files
 

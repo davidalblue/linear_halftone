@@ -137,6 +137,15 @@ export function initPanel(actions: Actions) {
     record.textContent = actions.isRecording() ? 'Stop' : 'Record'
     record.classList.toggle('is-recording', actions.isRecording())
   })
+  // every setting as text, to keep or to send on
+  button($('#copy-settings'), async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(state, null, 2))
+      hint('Settings copied')
+    } catch {
+      hint("Couldn't copy to the clipboard", true)
+    }
+  })
 
   syncPanel()
 }
