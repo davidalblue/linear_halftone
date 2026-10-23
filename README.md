@@ -17,7 +17,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   **Shape** reads the opaque parts of a transparent PNG, and is picked for you when the PNG has
   transparency. **Invert** swaps ink and paper. **Brightness** can make blank paper a mid tone.
   **Soften** blurs the image first, so edges become ramps the lines taper along. **Glow** draws a
-  dark rim along every edge of the design; its slider sets how wide.
+  dark rim along every edge of the design; its slider sets how wide. **Haze** darkens the paper near
+  the design and leaves open space light, so line weight varies over the whole composition.
 - **Halftone**: the switch flips between the halftone and the original image (or press **H**).
   **Steps** cuts each line into pieces of one width; **Screen** works like a printer's line screen,
   each edge of a line following the image pixel by pixel, so lines taper to points and the design's

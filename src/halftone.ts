@@ -68,19 +68,26 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0 })
-  const look = reader(map, placement(w, h), vertical)
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0 })
+  const haziness = state.haze / 100
   // u is across the lines, v along them
   const start = vertical ? (u: number, v: number) => pen.moveTo(u, v) : (u: number, v: number) => pen.moveTo(v, u)
   const point = vertical ? (u: number, v: number) => pen.lineTo(u, v) : (u: number, v: number) => pen.lineTo(v, u)
 
-  /** A line's width where the image has `ink` (and `rim` from the glow). */
-  const width = (ink: number, rim: number, swell: number, shown: number) => {
+  /** The tone, 0 to 1, where the image has `ink` (and `rim` from the glow, `haze` from the haze). */
+  const shade = (ink: number, rim: number, haze: number) => {
     let t = clamp((ink - 0.5) * contrast + 0.5)
     if (state.invert) t = 1 - t
     t = clamp(t + brightness)
-    // the glow's rim is always ink, even inverted
-    t += rim * (1 - t)
+    // the haze and the glow's rim are always ink, even inverted
+    t += haziness * haze * (1 - t)
+    return t + rim * (1 - t)
+  }
+  // Screen reads the tone at every point, so it's worked out once for the whole map
+  const tones = state.style === 'screen' ? toneMap(map, `${contrast} ${brightness} ${haziness} ${state.invert}`, shade) : null
+  const look = reader(map, placement(w, h), vertical, tones)
+  /** A line's width where the tone is `t`. */
+  const width = (t: number, swell: number, shown: number) => {
     // Wave and Blobs: heavier ink where they pass, mostly over the design so it stays legible
     if (swell) t = clamp(t + swell * (0.3 + 0.7 * t))
     t *= shown
@@ -114,7 +121,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         ? amount * along * 0.05 * (0.7 * Math.sin(Math.PI * 2 * time + i * 0.5) + 0.3 * Math.sin(Math.PI * 1.2 * time - i * 0.17))
         : 0
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? i / (count - 1) : 0, amount) : 1
-    shape({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen })
+    shape({ centre, drift, shown, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
 
@@ -125,7 +132,8 @@ type Line = {
   space: number
   along: number
   look: ReturnType<typeof reader>
-  width(ink: number, rim: number, swell: number, shown: number): number
+  shade(ink: number, rim: number, haze: number): number
+  width(t: number, swell: number, shown: number): number
   swellAt(centre: number, v: number): number
   start(u: number, v: number): void
   point(u: number, v: number): void
@@ -133,7 +141,7 @@ type Line = {
 }
 
 /** Steps: the line in pieces, each as wide as the average ink over it. */
-function stepLine({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen }: Line) {
+function stepLine({ centre, drift, shown, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
   const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
   const steps = Math.ceil(along / step)
@@ -142,7 +150,7 @@ function stepLine({ centre, drift, shown, space, along, look, width, swellAt, st
   for (let j = 0; j < steps; j++) {
     const v = j * step + drift
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
-    widths[j] = width(ink, look.rim, swellAt(centre, j * step), shown)
+    widths[j] = width(shade(ink, look.rim, look.haze), swellAt(centre, j * step), shown)
     if (widths[j] > 0) any = true
   }
   if (!any) return
@@ -183,13 +191,14 @@ function stepLine({ centre, drift, shown, space, along, look, width, swellAt, st
  * design can cut through a line, and lines taper to points as they thin out.
  */
 function screenLine({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen }: Line) {
-  // points across the line, an odd number so one sits on its middle
-  const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
+  // points across the line, an odd number so one sits on its middle; the edge between two points is
+  // found by interpolating, so they can be over a pixel apart
+  const across = Math.max(5, Math.min(17, Math.ceil(space / 1.2))) | 1
   const offsets = new Float32Array(across)
   for (let k = 0; k < across; k++) offsets[k] = -space / 2 + (k * space) / (across - 1)
   const room = new Float32Array(across)
-  // a row every pixel or so
-  const rowStep = Math.max(1, along / 3000)
+  // a row every pixel and a half; the edges are drawn straight between rows
+  const rowStep = Math.max(1.5, along / 3000)
   const rows = Math.ceil(along / rowStep) + 1
   const left = new Float32Array(rows)
   const right = new Float32Array(rows)
@@ -203,9 +212,8 @@ function screenLine({ centre, drift, shown, space, along, look, width, swellAt, 
     let first = -1
     let last = -1
     for (let k = 0; k < across; k++) {
-      const ink = look.point(centre + offsets[k], v + drift)
       // how far inside the line this point is (negative: outside)
-      room[k] = width(ink, look.rim, swell, shown) / 2 - Math.abs(offsets[k])
+      room[k] = width(look.tone(centre + offsets[k], v + drift), swell, shown) / 2 - Math.abs(offsets[k])
       if (room[k] >= 0) {
         if (first < 0) first = k
         last = k
@@ -273,15 +281,17 @@ function reveal(time: number, at: number, amount: number) {
 
 /**
  * Reads the ink map at places on the canvas, given across and along the lines: `box` averages a
- * box, `point` blends the nearest map pixels. Both leave the glow's rim there in `rim`. Outside the
+ * box, leaving the glow's rim there in `rim` and the haze in `haze`; `tone` blends the nearest
+ * pixels of the tone map. Outside the
  * image counts as blank paper.
  */
-function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, vertical: boolean) {
+function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, vertical: boolean, tones: Tones | null) {
   const sx = map.w / at.w
   const sy = map.h / at.h
   const row = map.w + 1
   const look = {
     rim: 0,
+    haze: 0,
     box(u0: number, u1: number, v0: number, v1: number) {
       const [x0, x1, y0, y1] = vertical ? [u0, u1, v0, v1] : [v0, v1, u0, u1]
       // the box in map pixels, at least one pixel each way
@@ -297,26 +307,45 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       c = Math.max(0, Math.min(map.h, c))
       d = Math.max(0, Math.min(map.h, d))
       look.rim = 0
+      look.haze = 0
       if (a === b || c === d) return 0
       const total = (s: Float64Array) => (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
       if (map.rimSums) look.rim = total(map.rimSums)
+      if (map.hazeSums) look.haze = total(map.hazeSums)
       return total(map.inkSums)
     },
-    point(u: number, v: number) {
+    tone(u: number, v: number) {
+      if (!tones) return 0
       const mx = ((vertical ? u : v) - at.x) * sx - 0.5
       const my = ((vertical ? v : u) - at.y) * sy - 0.5
-      const x0 = Math.floor(mx)
-      const y0 = Math.floor(my)
-      const fx = mx - x0
-      const fy = my - y0
-      look.rim = map.rim ? blend(map.rim, x0, y0, fx, fy) : 0
-      return blend(map.ink, x0, y0, fx, fy)
+      const x = Math.floor(mx)
+      const y = Math.floor(my)
+      const fx = mx - x
+      const fy = my - y
+      const t = tones.values
+      // inside the map, the four pixels around the point are blended directly
+      if (x >= 0 && y >= 0 && x + 1 < map.w && y + 1 < map.h) {
+        const i = y * map.w + x
+        return (t[i] * (1 - fx) + t[i + 1] * fx) * (1 - fy) + (t[i + map.w] * (1 - fx) + t[i + map.w + 1] * fx) * fy
+      }
+      const get = (px: number, py: number) => (px < 0 || py < 0 || px >= map.w || py >= map.h ? tones.outside : t[py * map.w + px])
+      return (get(x, y) * (1 - fx) + get(x + 1, y) * fx) * (1 - fy) + (get(x, y + 1) * (1 - fx) + get(x + 1, y + 1) * fx) * fy
     },
   }
-  const get = (values: Float32Array, x: number, y: number) => (x < 0 || y < 0 || x >= map.w || y >= map.h ? 0 : values[y * map.w + x])
-  const blend = (values: Float32Array, x: number, y: number, fx: number, fy: number) =>
-    (get(values, x, y) * (1 - fx) + get(values, x + 1, y) * fx) * (1 - fy) + (get(values, x, y + 1) * (1 - fx) + get(values, x + 1, y + 1) * fx) * fy
   return look
+}
+
+/** The tone at every pixel of the ink map, and of the paper outside it. */
+type Tones = { map: InkMap | null; key: string; values: Float32Array; outside: number }
+let tones: Tones = { map: null, key: '', values: new Float32Array(0), outside: 0 }
+
+/** The tone map for `map` shaded with `shade`; rebuilt only when the map or the shading (`key`) changes. */
+function toneMap(map: InkMap, key: string, shade: (ink: number, rim: number, haze: number) => number) {
+  if (tones.map === map && tones.key === key) return tones
+  const values = new Float32Array(map.w * map.h)
+  for (let i = 0; i < values.length; i++) values[i] = shade(map.ink[i], map.rim ? map.rim[i] : 0, map.haze ? map.haze[i] : 0)
+  tones = { map, key, values, outside: shade(0, 0, 0) }
+  return tones
 }
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v))

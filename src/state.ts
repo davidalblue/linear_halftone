@@ -22,6 +22,9 @@ const DEFAULTS = {
   // Glow draws a rim of ink along every edge of the design, Glow Size wide
   glow: false,
   glowSize: 30,
+  // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
+  // whole composition
+  haze: 0,
   // Halftone: off shows the original image
   halftone: true,
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
@@ -58,6 +61,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   brightness: [0, 100],
   soften: [0, 100],
   glowSize: [0, 100],
+  haze: [0, 100],
   lines: [8, 300],
   weight: [5, 100],
   hairline: [0, 50],

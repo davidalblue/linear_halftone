@@ -58,6 +58,7 @@ export function initPanel(actions: Actions) {
     num('Brightness', 'brightness'),
     num('Soften', 'soften'),
     num('Glow', 'glowSize', () => state.glow),
+    num('Haze', 'haze'),
   )
 
   // Halftone: switching it off shows the original image

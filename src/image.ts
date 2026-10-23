@@ -1,5 +1,5 @@
 // The image being halftoned: kept as a canvas to draw (the original view), and as a map of its ink,
-// softened and with a glow if asked, which the lines read from.
+// softened and with a glow and haze if asked, which the lines read from.
 import type { Read } from './state'
 
 /** Longest side of the copy that's drawn as the original. */
@@ -61,13 +61,14 @@ function pixels() {
 
 /**
  * How the map is made. Soften blurs the ink; Glow (0 = off) draws a rim along every edge of the
- * shapes, as wide as its value.
+ * shapes, as wide as its value; Haze spreads a wide shadow of the design over the paper around it.
  */
-export type MapSettings = { read: Read; soften: number; glow: number }
+export type MapSettings = { read: Read; soften: number; glow: number; haze: boolean }
 
 /**
- * The ink, 0 to 1, of each map pixel (`ink`), and of the glow's rim (`rim`, or null without Glow),
- * each with a summed-area table so any box of the map can be averaged at once.
+ * The ink, 0 to 1, of each map pixel (`ink`), of the glow's rim (`rim`, or null without Glow) and
+ * of the haze (`haze`, or null without it), each with a summed-area table so any box of the map can
+ * be averaged at once.
  */
 export type InkMap = {
   w: number
@@ -76,6 +77,8 @@ export type InkMap = {
   inkSums: Float64Array
   rim: Float32Array | null
   rimSums: Float64Array | null
+  haze: Float32Array | null
+  hazeSums: Float64Array | null
 }
 
 let raw = { source: null as HTMLCanvasElement | null, read: '' as Read | '', w: 0, h: 0, ink: new Float32Array(0) }
@@ -84,8 +87,8 @@ let mapKey = ''
 
 /** The ink map for these settings; rebuilt only when they or the image change. */
 export function inkMap(settings: MapSettings) {
-  const { read, soften, glow } = settings
-  const key = `${read} ${soften} ${glow}`
+  const { read, soften, glow, haze: hazy } = settings
+  const key = `${read} ${soften} ${glow} ${hazy}`
   if (map && raw.source === picture.source && mapKey === key) return map
 
   // Tone is how dark each pixel is over white paper, Shape is how opaque
@@ -110,7 +113,25 @@ export function inkMap(settings: MapSettings) {
     const spread = blur(raw.ink, w, h, Math.max(1, Math.round((0.002 + (glow / 100) * 0.03) * longest)))
     rim = spread.map((b) => 1 - Math.abs(2 * b - 1))
   }
-  map = { w, h, ink, inkSums: sums(ink, w, h), rim, rimSums: rim && sums(rim, w, h) }
+  let haze: Float32Array | null = null
+  if (hazy) {
+    // a wide blur of the design: heaviest right next to it, fading into open space. It's scaled so
+    // the densest part reaches 1, kept off the design itself so that stays clear, and faded out
+    // towards the image's sides so they don't show as a frame.
+    const reach = Math.round(0.03 * longest)
+    const shadow = blur(raw.ink, w, h, reach)
+    let most = 0
+    for (const v of shadow) most = Math.max(most, v)
+    haze = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        const side = Math.min(1, Math.min(x, y, w - 1 - x, h - 1 - y) / (reach * 2))
+        haze[i] = (most ? shadow[i] / most : 0) * (1 - ink[i]) * side * side * (3 - 2 * side)
+      }
+    }
+  }
+  map = { w, h, ink, inkSums: sums(ink, w, h), rim, rimSums: rim && sums(rim, w, h), haze, hazeSums: haze && sums(haze, w, h) }
   mapKey = key
   return map
 }
