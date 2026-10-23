@@ -1,5 +1,5 @@
 import { isCutOut, loadImage, picture } from './image'
-import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type Direction, type Edges, type Mode, type NumberKey, type Read } from './state'
+import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type Direction, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
 import { $, addSync, button, choice, colour, hint, numberField, onPanelChange, slider, syncPanel, toggle, type Bind } from './ui'
 
 /** Binds a slider to a number in the state, over its range. */
@@ -51,10 +51,22 @@ export function initPanel(actions: Actions) {
   ]
   choice($('#read'), reads, { get: () => state.read, set: (v) => (state.read = v) })
   toggle($('#invert'), { get: () => state.invert, set: (v) => (state.invert = v) })
-  $('#image-sliders').append(num('Scale', 'scale'), num('Contrast', 'contrast'))
+  toggle($('#glow'), { get: () => state.glow, set: (v) => (state.glow = v) })
+  $('#image-sliders').append(
+    num('Scale', 'scale'),
+    num('Contrast', 'contrast'),
+    num('Brightness', 'brightness'),
+    num('Soften', 'soften'),
+    num('Glow', 'glowSize', () => state.glow),
+  )
 
   // Halftone: switching it off shows the original image
   toggle($('#halftone-switch'), { get: () => state.halftone, set: (v) => (state.halftone = v) })
+  const styles: { value: Style; label: string }[] = [
+    { value: 'steps', label: 'Steps' },
+    { value: 'screen', label: 'Screen' },
+  ]
+  choice($('#style'), styles, { get: () => state.style, set: (v) => (state.style = v) })
   const directions: { value: Direction; label: string }[] = [
     { value: 'vertical', label: 'Vertical' },
     { value: 'horizontal', label: 'Horizontal' },
@@ -64,7 +76,8 @@ export function initPanel(actions: Actions) {
     num('Lines', 'lines'),
     num('Weight', 'weight'),
     num('Hairline', 'hairline'),
-    num('Detail', 'detail'),
+    // Screen follows the image every pixel, so it has no steps to size
+    num('Detail', 'detail', () => state.style === 'steps', 'Fine'),
     num('Levels', 'levels', undefined, undefined, (v) => (v ? String(v) : 'Any')),
   )
   const edges: { value: Edges; label: string }[] = [
@@ -72,6 +85,7 @@ export function initPanel(actions: Actions) {
     { value: 'sloped', label: 'Sloped' },
   ]
   choice($('#edges'), edges, { get: () => state.edges, set: (v) => (state.edges = v) })
+  addSync(() => $('#edges').querySelectorAll('button').forEach((b) => ((b as HTMLButtonElement).disabled = state.style === 'screen')))
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })

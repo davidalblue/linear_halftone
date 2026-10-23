@@ -1,5 +1,6 @@
 export type Read = 'tone' | 'shape'
 export type Direction = 'vertical' | 'horizontal'
+export type Style = 'steps' | 'screen'
 export type Edges = 'square' | 'sloped'
 export type Mode = 'wave' | 'drift' | 'reveal'
 
@@ -14,8 +15,17 @@ const DEFAULTS = {
   invert: false,
   scale: 80,
   contrast: 50,
+  // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
+  brightness: 50,
+  // Soften blurs the image first, so edges become ramps the lines taper along
+  soften: 0,
+  // Glow draws a rim of ink along every edge of the design, Glow Size wide
+  glow: false,
+  glowSize: 30,
   // Halftone: off shows the original image
   halftone: true,
+  // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
+  style: 'steps' as Style,
   direction: 'vertical' as Direction,
   lines: 70,
   // the thickest line, and the thinnest, as a share of the space between lines
@@ -45,6 +55,9 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   canvasH: [100, 6000],
   scale: [10, 200],
   contrast: [0, 100],
+  brightness: [0, 100],
+  soften: [0, 100],
+  glowSize: [0, 100],
   lines: [8, 300],
   weight: [5, 100],
   hairline: [0, 50],

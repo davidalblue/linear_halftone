@@ -1,5 +1,5 @@
-// The image being halftoned: kept as a canvas to draw (the original view), and as a summed-area
-// table of its ink so any box of it can be averaged in constant time.
+// The image being halftoned: kept as a canvas to draw (the original view), and as a map of its ink,
+// softened and with a glow if asked, which the lines read from.
 import type { Read } from './state'
 
 /** Longest side of the copy that's drawn as the original. */
@@ -12,8 +12,6 @@ export const picture = {
   name: '',
   source: sphere(),
 }
-
-let map = { w: 0, h: 0, sum: new Float64Array(0), read: '' as Read | '', source: null as HTMLCanvasElement | null }
 
 /** Loads an image file (PNG, JPG, SVG…), replacing the current one. */
 export async function loadImage(file: File) {
@@ -41,14 +39,14 @@ export async function loadImage(file: File) {
 
 /** Whether a good part of the image is see-through, as with a logo on a transparent PNG. */
 export function isCutOut() {
-  const { data } = ink()
+  const { data } = pixels()
   let clear = 0
   for (let i = 3; i < data.length; i += 4) if (data[i] < 250) clear++
   return clear > (data.length / 4) * 0.05
 }
 
 /** The image's pixels at the map's size. */
-function ink() {
+function pixels() {
   const src = picture.source
   const fit = Math.min(1, MAP_SIZE / Math.max(src.width, src.height))
   const w = Math.max(1, Math.round(src.width * fit))
@@ -62,26 +60,96 @@ function ink() {
 }
 
 /**
- * The ink map for `read`: Tone is how dark each pixel is over white paper, Shape is how opaque.
- * Rebuilt only when the image or the reading changes.
+ * How the map is made. Soften blurs the ink; Glow (0 = off) draws a rim along every edge of the
+ * shapes, as wide as its value.
  */
-export function inkMap(read: Read) {
-  if (map.source === picture.source && map.read === read) return map
-  const { w, h, data } = ink()
-  // sum[(y)(w+1) + x] is the total ink above and left of pixel (x, y)
-  const sum = new Float64Array((w + 1) * (h + 1))
+export type MapSettings = { read: Read; soften: number; glow: number }
+
+/**
+ * The ink, 0 to 1, of each map pixel (`ink`), and of the glow's rim (`rim`, or null without Glow),
+ * each with a summed-area table so any box of the map can be averaged at once.
+ */
+export type InkMap = {
+  w: number
+  h: number
+  ink: Float32Array
+  inkSums: Float64Array
+  rim: Float32Array | null
+  rimSums: Float64Array | null
+}
+
+let raw = { source: null as HTMLCanvasElement | null, read: '' as Read | '', w: 0, h: 0, ink: new Float32Array(0) }
+let map: InkMap | null = null
+let mapKey = ''
+
+/** The ink map for these settings; rebuilt only when they or the image change. */
+export function inkMap(settings: MapSettings) {
+  const { read, soften, glow } = settings
+  const key = `${read} ${soften} ${glow}`
+  if (map && raw.source === picture.source && mapKey === key) return map
+
+  // Tone is how dark each pixel is over white paper, Shape is how opaque
+  if (raw.source !== picture.source || raw.read !== read) {
+    const { w, h, data } = pixels()
+    const ink = new Float32Array(w * h)
+    for (let i = 0; i < ink.length; i++) {
+      const alpha = data[i * 4 + 3] / 255
+      const lum = (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / 255
+      ink[i] = read === 'shape' ? alpha : alpha * (1 - lum)
+    }
+    raw = { source: picture.source, read, w, h, ink }
+  }
+
+  const { w, h } = raw
+  const longest = Math.max(w, h)
+  // Soften 100 blurs by 4% of the image's longest side
+  const ink = soften ? blur(raw.ink, w, h, Math.round((soften / 100) * 0.04 * longest)) : raw.ink
+  let rim: Float32Array | null = null
+  if (glow) {
+    // the rim is darkest exactly on an edge, where the blurred shape is half ink, and fades either side
+    const spread = blur(raw.ink, w, h, Math.max(1, Math.round((0.002 + (glow / 100) * 0.03) * longest)))
+    rim = spread.map((b) => 1 - Math.abs(2 * b - 1))
+  }
+  map = { w, h, ink, inkSums: sums(ink, w, h), rim, rimSums: rim && sums(rim, w, h) }
+  mapKey = key
+  return map
+}
+
+/** A summed-area table: entry (x, y) of the (w+1)-wide table is the total above and left of (x, y). */
+function sums(values: Float32Array, w: number, h: number) {
+  const table = new Float64Array((w + 1) * (h + 1))
   for (let y = 0; y < h; y++) {
     let row = 0
     for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4
-      const alpha = data[i + 3] / 255
-      const lum = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
-      row += read === 'shape' ? alpha : alpha * (1 - lum)
-      sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row
+      row += values[y * w + x]
+      table[(y + 1) * (w + 1) + x + 1] = table[y * (w + 1) + x + 1] + row
     }
   }
-  map = { w, h, sum, read, source: picture.source }
-  return map
+  return table
+}
+
+/** A blur close to a Gaussian of about `r` px: three box blurs each way. Outside counts as paper. */
+function blur(values: Float32Array, w: number, h: number, r: number) {
+  if (r < 1) return values
+  const out = Float32Array.from(values)
+  const tmp = new Float32Array(values.length)
+  for (let pass = 0; pass < 3; pass++) {
+    for (let y = 0; y < h; y++) box(out, tmp, y * w, 1, w, r)
+    for (let x = 0; x < w; x++) box(tmp, out, x, w, h, r)
+  }
+  return out
+}
+
+/** Averages `length` values from `start`, `step` apart, over a window of r either side. */
+function box(src: Float32Array, dst: Float32Array, start: number, step: number, length: number, r: number) {
+  const size = 2 * r + 1
+  let sum = 0
+  for (let i = 0; i <= Math.min(r, length - 1); i++) sum += src[start + i * step]
+  for (let i = 0; i < length; i++) {
+    dst[start + i * step] = sum / size
+    if (i + r + 1 < length) sum += src[start + (i + r + 1) * step]
+    if (i - r >= 0) sum -= src[start + (i - r) * step]
+  }
 }
 
 /** The starting image: a lit sphere, which shows the whole range of tones. */

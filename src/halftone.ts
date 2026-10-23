@@ -1,7 +1,8 @@
-// The linear halftone: evenly spaced lines whose width follows the ink of the image underneath,
-// in steps along each line. Each line is one filled outline, so the canvas and the SVG draw the
-// same shapes.
-import { inkMap, picture } from './image'
+// The linear halftone: evenly spaced lines whose width follows the ink of the image underneath.
+// Steps cuts each line into short pieces of one width each; Screen follows the image pixel by
+// pixel, each edge of a line on its own, like a printer's line screen. Each line is one filled
+// outline, so the canvas and the SVG draw the same shapes.
+import { inkMap, picture, type InkMap } from './image'
 import { state } from './state'
 
 /** Where outlines are drawn: a canvas context, or the SVG writer below. */
@@ -64,17 +65,33 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const space = across / count
   const widest = space * (state.weight / 100)
   const thinnest = Math.min(widest, space * (state.hairline / 100))
-  // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
-  const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
-  const steps = Math.ceil(along / step)
   const contrast = 2 ** ((state.contrast - 50) / 20)
+  const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const ink = sampler(w, h, vertical)
-  const widths = new Float32Array(steps)
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0 })
+  const look = reader(map, placement(w, h), vertical)
   // u is across the lines, v along them
   const start = vertical ? (u: number, v: number) => pen.moveTo(u, v) : (u: number, v: number) => pen.moveTo(v, u)
   const point = vertical ? (u: number, v: number) => pen.lineTo(u, v) : (u: number, v: number) => pen.lineTo(v, u)
 
+  /** A line's width where the image has `ink` (and `rim` from the glow). */
+  const width = (ink: number, rim: number, swell: number, shown: number) => {
+    let t = clamp((ink - 0.5) * contrast + 0.5)
+    if (state.invert) t = 1 - t
+    t = clamp(t + brightness)
+    // the glow's rim is always ink, even inverted
+    t += rim * (1 - t)
+    // Wave: a band of heavier ink, mostly over the design so it stays legible
+    if (swell) t = clamp(t + swell * (0.3 + 0.7 * t))
+    t *= shown
+    if (state.levels) t = Math.round(t * state.levels) / state.levels
+    return thinnest + (widest - thinnest) * t
+  }
+  /** The Wave's band where the line at `centre` passes `v`. */
+  const swellAt = (centre: number, v: number) =>
+    state.mode === 'wave' && amount ? amount * 0.5 * Math.sin(Math.PI * 2 * (time - (1.2 * centre) / across - (0.4 * v) / along)) : 0
+
+  const shape = state.style === 'screen' ? screenLine : stepLine
   for (let i = 0; i < count; i++) {
     const centre = (i + 0.5) * space
     // Drift slides what each line shows up and down, each line a little behind its neighbour
@@ -83,52 +100,121 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         ? amount * along * 0.05 * (0.7 * Math.sin(Math.PI * 2 * time + i * 0.5) + 0.3 * Math.sin(Math.PI * 1.2 * time - i * 0.17))
         : 0
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? i / (count - 1) : 0, amount) : 1
-    let any = false
-    for (let j = 0; j < steps; j++) {
-      const v = j * step + drift
-      let t = ink(centre - space / 2, centre + space / 2, v, v + step)
-      t = clamp((t - 0.5) * contrast + 0.5)
-      if (state.invert) t = 1 - t
-      // Wave: a band of heavier ink sweeps across the lines, mostly over the design so it stays legible
-      if (state.mode === 'wave' && amount) {
-        const swell = Math.sin(Math.PI * 2 * (time - (1.2 * centre) / across - (0.4 * j * step) / along))
-        t = clamp(t + amount * 0.5 * swell * (0.3 + 0.7 * t))
-      }
-      t *= shown
-      if (state.levels) t = Math.round(t * state.levels) / state.levels
-      widths[j] = thinnest + (widest - thinnest) * t
-      if (widths[j] > 0) any = true
-    }
-    if (!any) continue
-
-    // down the left side of the line, then back up the right
-    const first = widths[0]
-    const last = widths[steps - 1]
-    start(centre - first / 2, 0)
-    if (state.edges === 'square') {
-      for (let j = 1; j < steps; j++) {
-        if (widths[j] === widths[j - 1]) continue
-        point(centre - widths[j - 1] / 2, j * step)
-        point(centre - widths[j] / 2, j * step)
-      }
-      point(centre - last / 2, along)
-      point(centre + last / 2, along)
-      for (let j = steps - 1; j > 0; j--) {
-        if (widths[j] === widths[j - 1]) continue
-        point(centre + widths[j] / 2, j * step)
-        point(centre + widths[j - 1] / 2, j * step)
-      }
-    } else {
-      // Sloped: each step's width is reached at its middle, so changes ramp over one step
-      const corner = (j: number) => j === 0 || j === steps - 1 || widths[j] !== widths[j - 1] || widths[j] !== widths[j + 1]
-      for (let j = 0; j < steps; j++) if (corner(j)) point(centre - widths[j] / 2, (j + 0.5) * step)
-      point(centre - last / 2, along)
-      point(centre + last / 2, along)
-      for (let j = steps - 1; j >= 0; j--) if (corner(j)) point(centre + widths[j] / 2, (j + 0.5) * step)
-    }
-    point(centre + first / 2, 0)
-    pen.closePath()
+    shape({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen })
   }
+}
+
+type Line = {
+  centre: number
+  drift: number
+  shown: number
+  space: number
+  along: number
+  look: ReturnType<typeof reader>
+  width(ink: number, rim: number, swell: number, shown: number): number
+  swellAt(centre: number, v: number): number
+  start(u: number, v: number): void
+  point(u: number, v: number): void
+  pen: Pen
+}
+
+/** Steps: the line in pieces, each as wide as the average ink over it. */
+function stepLine({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen }: Line) {
+  // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
+  const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
+  const steps = Math.ceil(along / step)
+  const widths = new Float32Array(steps)
+  let any = false
+  for (let j = 0; j < steps; j++) {
+    const v = j * step + drift
+    const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
+    widths[j] = width(ink, look.rim, swellAt(centre, j * step), shown)
+    if (widths[j] > 0) any = true
+  }
+  if (!any) return
+
+  // down the left side of the line, then back up the right
+  const first = widths[0]
+  const last = widths[steps - 1]
+  start(centre - first / 2, 0)
+  if (state.edges === 'square') {
+    for (let j = 1; j < steps; j++) {
+      if (widths[j] === widths[j - 1]) continue
+      point(centre - widths[j - 1] / 2, j * step)
+      point(centre - widths[j] / 2, j * step)
+    }
+    point(centre - last / 2, along)
+    point(centre + last / 2, along)
+    for (let j = steps - 1; j > 0; j--) {
+      if (widths[j] === widths[j - 1]) continue
+      point(centre + widths[j] / 2, j * step)
+      point(centre + widths[j - 1] / 2, j * step)
+    }
+  } else {
+    // Sloped: each step's width is reached at its middle, so changes ramp over one step
+    const corner = (j: number) => j === 0 || j === steps - 1 || widths[j] !== widths[j - 1] || widths[j] !== widths[j + 1]
+    for (let j = 0; j < steps; j++) if (corner(j)) point(centre - widths[j] / 2, (j + 0.5) * step)
+    point(centre - last / 2, along)
+    point(centre + last / 2, along)
+    for (let j = steps - 1; j >= 0; j--) if (corner(j)) point(centre + widths[j] / 2, (j + 0.5) * step)
+  }
+  point(centre + first / 2, 0)
+  pen.closePath()
+}
+
+/**
+ * Screen: like a printer's line screen. Every row across the line, each point is ink if it's
+ * nearer the line's middle than half the width the image asks for right there. The line runs from
+ * the first such point to the last, so each edge follows the image on its own: an edge of the
+ * design can cut through a line, and lines taper to points as they thin out.
+ */
+function screenLine({ centre, drift, shown, space, along, look, width, swellAt, start, point, pen }: Line) {
+  // points across the line, an odd number so one sits on its middle
+  const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
+  const offsets = new Float32Array(across)
+  for (let k = 0; k < across; k++) offsets[k] = -space / 2 + (k * space) / (across - 1)
+  const room = new Float32Array(across)
+  // a row every pixel or so
+  const rowStep = Math.max(1, along / 3000)
+  const rows = Math.ceil(along / rowStep) + 1
+  const left = new Float32Array(rows)
+  const right = new Float32Array(rows)
+  // where the edge crosses between two points across
+  const edge = (a: number, b: number) => offsets[a] + ((offsets[b] - offsets[a]) * room[a]) / (room[a] - room[b])
+  let any = false
+
+  for (let r = 0; r < rows; r++) {
+    const v = Math.min(along, r * rowStep)
+    const swell = swellAt(centre, v)
+    let first = -1
+    let last = -1
+    for (let k = 0; k < across; k++) {
+      const ink = look.point(centre + offsets[k], v + drift)
+      // how far inside the line this point is (negative: outside)
+      room[k] = width(ink, look.rim, swell, shown) / 2 - Math.abs(offsets[k])
+      if (room[k] >= 0) {
+        if (first < 0) first = k
+        last = k
+      }
+    }
+    if (first < 0) {
+      // no ink: the line closes to nothing at its middle
+      left[r] = right[r] = 0
+      continue
+    }
+    left[r] = first > 0 ? edge(first - 1, first) : offsets[0]
+    right[r] = last < across - 1 ? edge(last + 1, last) : offsets[across - 1]
+    if (right[r] > left[r]) any = true
+  }
+  if (!any) return
+
+  // down the left side of the line, then back up the right, skipping points along straight runs
+  const at = (r: number) => Math.min(along, r * rowStep)
+  const bend = (edges: Float32Array, r: number) => r === 0 || r === rows - 1 || edges[r] !== edges[r - 1] || edges[r] !== edges[r + 1]
+  start(centre + left[0], 0)
+  for (let r = 1; r < rows; r++) if (bend(left, r)) point(centre + left[r], at(r))
+  for (let r = rows - 1; r >= 0; r--) if (bend(right, r)) point(centre + right[r], at(r))
+  pen.closePath()
 }
 
 /**
@@ -148,33 +234,51 @@ function reveal(time: number, at: number, amount: number) {
 }
 
 /**
- * Returns how much ink, 0 to 1, lies in a box of the canvas. The box is given across and along the
- * lines; outside the image counts as blank paper.
+ * Reads the ink map at places on the canvas, given across and along the lines: `box` averages a
+ * box, `point` blends the nearest map pixels. Both leave the glow's rim there in `rim`. Outside the
+ * image counts as blank paper.
  */
-function sampler(w: number, h: number, vertical: boolean) {
-  const map = inkMap(state.read)
-  const at = placement(w, h)
+function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, vertical: boolean) {
   const sx = map.w / at.w
   const sy = map.h / at.h
   const row = map.w + 1
-  return (u0: number, u1: number, v0: number, v1: number) => {
-    const [x0, x1, y0, y1] = vertical ? [u0, u1, v0, v1] : [v0, v1, u0, u1]
-    // the box in map pixels, at least one pixel each way
-    let a = Math.round((x0 - at.x) * sx)
-    let b = Math.round((x1 - at.x) * sx)
-    let c = Math.round((y0 - at.y) * sy)
-    let d = Math.round((y1 - at.y) * sy)
-    if (b <= a) b = a + 1
-    if (d <= c) d = c + 1
-    const area = (b - a) * (d - c)
-    a = Math.max(0, Math.min(map.w, a))
-    b = Math.max(0, Math.min(map.w, b))
-    c = Math.max(0, Math.min(map.h, c))
-    d = Math.max(0, Math.min(map.h, d))
-    if (a === b || c === d) return 0
-    const s = map.sum
-    return (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
+  const look = {
+    rim: 0,
+    box(u0: number, u1: number, v0: number, v1: number) {
+      const [x0, x1, y0, y1] = vertical ? [u0, u1, v0, v1] : [v0, v1, u0, u1]
+      // the box in map pixels, at least one pixel each way
+      let a = Math.round((x0 - at.x) * sx)
+      let b = Math.round((x1 - at.x) * sx)
+      let c = Math.round((y0 - at.y) * sy)
+      let d = Math.round((y1 - at.y) * sy)
+      if (b <= a) b = a + 1
+      if (d <= c) d = c + 1
+      const area = (b - a) * (d - c)
+      a = Math.max(0, Math.min(map.w, a))
+      b = Math.max(0, Math.min(map.w, b))
+      c = Math.max(0, Math.min(map.h, c))
+      d = Math.max(0, Math.min(map.h, d))
+      look.rim = 0
+      if (a === b || c === d) return 0
+      const total = (s: Float64Array) => (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
+      if (map.rimSums) look.rim = total(map.rimSums)
+      return total(map.inkSums)
+    },
+    point(u: number, v: number) {
+      const mx = ((vertical ? u : v) - at.x) * sx - 0.5
+      const my = ((vertical ? v : u) - at.y) * sy - 0.5
+      const x0 = Math.floor(mx)
+      const y0 = Math.floor(my)
+      const fx = mx - x0
+      const fy = my - y0
+      look.rim = map.rim ? blend(map.rim, x0, y0, fx, fy) : 0
+      return blend(map.ink, x0, y0, fx, fy)
+    },
   }
+  const get = (values: Float32Array, x: number, y: number) => (x < 0 || y < 0 || x >= map.w || y >= map.h ? 0 : values[y * map.w + x])
+  const blend = (values: Float32Array, x: number, y: number, fx: number, fy: number) =>
+    (get(values, x, y) * (1 - fx) + get(values, x + 1, y) * fx) * (1 - fy) + (get(values, x, y + 1) * (1 - fx) + get(values, x + 1, y + 1) * fx) * fy
+  return look
 }
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v))
