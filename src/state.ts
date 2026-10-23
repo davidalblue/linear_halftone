@@ -13,15 +13,15 @@ const DEFAULTS = {
   // Image: Tone reads dark areas as ink, Shape reads the opaque parts of a transparent PNG
   read: 'tone' as Read,
   invert: false,
-  scale: 80,
-  contrast: 50,
+  scale: 125,
+  contrast: 63,
   // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
-  brightness: 50,
+  brightness: 49,
   // Soften blurs the image first, so edges become ramps the lines taper along
-  soften: 0,
+  soften: 19,
   // Glow draws a rim of ink along every edge of the design, Glow Size wide
-  glow: false,
-  glowSize: 30,
+  glow: true,
+  glowSize: 8,
   // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
   // whole composition
   haze: 0,
@@ -30,23 +30,23 @@ const DEFAULTS = {
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
   style: 'steps' as Style,
   direction: 'vertical' as Direction,
-  lines: 70,
+  lines: 75,
   // the thickest line, and the thinnest, as a share of the space between lines
-  weight: 90,
+  weight: 54,
   hairline: 12,
   // how short the steps along each line are
   detail: 55,
   // how many line widths there are (0 = any width)
-  levels: 4,
+  levels: 8,
   edges: 'square' as Edges,
   // Motion
-  motion: true,
-  mode: 'wave' as Mode,
+  motion: false,
+  mode: 'blobs' as Mode,
   speed: 30,
   amount: 40,
   // Colour
-  lineColour: '#1f1d1b',
-  background: '#cdb796',
+  lineColour: '#d6d6d6',
+  background: '#080f42',
 }
 
 export type State = typeof DEFAULTS
