@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+    <title>Linear Halftone</title>
+  </head>
+  <body>
+    <main class="app">
+      <div class="stage" id="stage"></div>
+
+      <aside class="panel">
+        <h1 class="logo">Linear Halftone</h1>
+
+        <section>
+          <h2>Image</h2>
+          <button class="tile upload" id="upload">Upload PNG</button>
+          <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" hidden />
+          <p class="note" id="image-note">Or drop an image on the canvas</p>
+          <div class="grid cols-2 spaced" id="read"></div>
+          <button class="tile toggle" id="invert" aria-pressed="false">Invert</button>
+          <div class="sliders" id="image-sliders"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Halftone</h2>
+            <button class="switch" id="halftone-switch" role="switch" aria-checked="true" aria-label="Halftone"></button>
+          </div>
+          <div class="grid cols-2" id="direction"></div>
+          <div class="sliders" id="line-sliders"></div>
+          <div class="grid cols-2 spaced" id="edges"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Motion</h2>
+            <button class="switch" id="motion-switch" role="switch" aria-checked="true" aria-label="Motion"></button>
+          </div>
+          <div class="grid cols-3" id="modes"></div>
+          <div class="sliders" id="motion-sliders"></div>
+        </section>
+
+        <section>
+          <h2>Colour</h2>
+          <div class="grid cols-2 swatches">
+            <label class="swatch"><input type="color" id="line-colour" /><span>Lines</span></label>
+            <label class="swatch"><input type="color" id="background-colour" /><span>Background</span></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Canvas</h2>
+          <div class="grid cols-5" id="canvas-sizes"></div>
+          <div class="size-row">
+            <label class="size"><span>W</span><input class="tile" id="canvas-w" type="number" inputmode="numeric" aria-label="Canvas width in pixels" /></label>
+            <span class="times">×</span>
+            <label class="size"><span>H</span><input class="tile" id="canvas-h" type="number" inputmode="numeric" aria-label="Canvas height in pixels" /></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Quick Actions</h2>
+          <div class="grid cols-3">
+            <button class="tile" id="play">Pause</button>
+            <button class="tile" id="randomize">Randomize</button>
+            <button class="tile" id="reset">Reset</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Export</h2>
+          <div class="grid cols-3">
+            <button class="tile" id="save-png">Save PNG</button>
+            <button class="tile" id="save-svg">Save SVG</button>
+            <button class="tile" id="record">Record</button>
+          </div>
+        </section>
+
+        <footer class="hint" id="hint" role="status">H to compare · Space to pause · ⌘S to save PNG</footer>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
