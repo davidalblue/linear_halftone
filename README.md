@@ -24,7 +24,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   edges cut through them. Lines sets how many; Weight and Hairline the thickest and thinnest line; Detail how short the steps
   are (Steps only); Levels how many widths there are (Any = smooth); Square or Sloped steps.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
-  down, **Reveal** fills the lines in one after another and empties them again.
+  down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
+  lines under soft patches that wander the canvas at random.
 - **Export**: PNG, SVG (one path per line) and video. Pick a canvas size first to export at that size.
 
 ## Files

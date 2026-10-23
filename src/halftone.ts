@@ -81,15 +81,29 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     t = clamp(t + brightness)
     // the glow's rim is always ink, even inverted
     t += rim * (1 - t)
-    // Wave: a band of heavier ink, mostly over the design so it stays legible
+    // Wave and Blobs: heavier ink where they pass, mostly over the design so it stays legible
     if (swell) t = clamp(t + swell * (0.3 + 0.7 * t))
     t *= shown
     if (state.levels) t = Math.round(t * state.levels) / state.levels
     return thinnest + (widest - thinnest) * t
   }
-  /** The Wave's band where the line at `centre` passes `v`. */
-  const swellAt = (centre: number, v: number) =>
-    state.mode === 'wave' && amount ? amount * 0.5 * Math.sin(Math.PI * 2 * (time - (1.2 * centre) / across - (0.4 * v) / along)) : 0
+  const blobs = state.mode === 'blobs' && amount ? blobsAt(time, w, h) : null
+  /** How much Wave or Blobs thicken (or thin) the line at `centre` where it passes `v`. */
+  const swellAt = (centre: number, v: number) => {
+    if (!amount) return 0
+    if (state.mode === 'wave') return amount * 0.5 * Math.sin(Math.PI * 2 * (time - (1.2 * centre) / across - (0.4 * v) / along))
+    if (!blobs) return 0
+    // inside a blob the lines swell; between blobs they're left as they are
+    const x = vertical ? centre : v
+    const y = vertical ? v : centre
+    let field = 0
+    for (const b of blobs) {
+      const dx = x - b.x
+      const dy = y - b.y
+      field += Math.exp(-(dx * dx + dy * dy) * b.fade)
+    }
+    return amount * 0.8 * Math.min(1, field)
+  }
 
   const shape = state.style === 'screen' ? screenLine : stepLine
   for (let i = 0; i < count; i++) {
@@ -215,6 +229,30 @@ function screenLine({ centre, drift, shown, space, along, look, width, swellAt, 
   for (let r = 1; r < rows; r++) if (bend(left, r)) point(centre + left[r], at(r))
   for (let r = rows - 1; r >= 0; r--) if (bend(right, r)) point(centre + right[r], at(r))
   pen.closePath()
+}
+
+/**
+ * Blobs: soft round patches, each wandering the canvas on its own path, two sine waves each way
+ * with frequencies and phases picked at random when the page opens.
+ */
+const BLOB_PATHS = Array.from({ length: 5 }, () => {
+  const r = () => Math.random()
+  return {
+    x: [1.2 + r() * 1.8, 0.5 + r() * 1.2, r() * Math.PI * 2, r() * Math.PI * 2],
+    y: [1.2 + r() * 1.8, 0.5 + r() * 1.2, r() * Math.PI * 2, r() * Math.PI * 2],
+    // each blob's size, as a share of the canvas's shorter side, and how fast it breathes
+    size: 0.1 + r() * 0.12,
+    pulse: [0.8 + r() * 1.2, r() * Math.PI * 2],
+  }
+})
+
+/** Where each blob is at `time` on a w × h canvas, and how quickly it fades from its middle. */
+function blobsAt(time: number, w: number, h: number) {
+  const wander = ([f1, f2, p1, p2]: number[]) => 0.5 + 0.48 * (0.65 * Math.sin(time * f1 + p1) + 0.35 * Math.sin(time * f2 + p2))
+  return BLOB_PATHS.map((b) => {
+    const radius = b.size * Math.min(w, h) * (1 + 0.25 * Math.sin(time * b.pulse[0] + b.pulse[1]))
+    return { x: wander(b.x) * w, y: wander(b.y) * h, fade: 1 / (2 * radius * radius) }
+  })
 }
 
 /**
