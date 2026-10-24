@@ -1,5 +1,5 @@
 // The image being halftoned: kept as a canvas to draw (the original view), and as a map of its ink,
-// softened and with a glow, haze and gap if asked, which the lines read from.
+// softened and with a glow, haze, gap and hollow if asked, which the lines read from.
 import type { Read } from './state'
 
 /** Longest side of the copy that's drawn as the original. */
@@ -62,14 +62,16 @@ function pixels() {
 /**
  * How the map is made. Soften blurs the ink; Glow (0 = off) draws a rim along every edge of the
  * shapes, as wide as its value; Haze spreads a wide shadow of the design over the paper around it;
- * Gap (0 = off) clears a band around the design, as wide as its value.
+ * Gap (0 = off) clears a band around the design, as wide as its value; Hollow marks the inside of
+ * the shapes, away from their edges.
  */
-export type MapSettings = { read: Read; soften: number; glow: number; haze: boolean; gap: number }
+export type MapSettings = { read: Read; soften: number; glow: number; haze: boolean; gap: number; hollow: boolean }
 
 /**
  * The ink, 0 to 1, of each map pixel (`ink`), of the glow's rim (`rim`, or null without Glow) and
- * of the haze (`haze`, or null without it) and of the gap's band (`gap`, or null without it), each
- * with a summed-area table so any box of the map can be averaged at once.
+ * of the haze (`haze`, or null without it), of the gap's band (`gap`, or null without it) and of the
+ * shapes' insides (`inside`, or null without Hollow), each with a summed-area table so any box of the
+ * map can be averaged at once.
  */
 export type InkMap = {
   w: number
@@ -82,6 +84,8 @@ export type InkMap = {
   hazeSums: Float64Array | null
   gap: Float32Array | null
   gapSums: Float64Array | null
+  inside: Float32Array | null
+  insideSums: Float64Array | null
 }
 
 let raw = { source: null as HTMLCanvasElement | null, read: '' as Read | '', w: 0, h: 0, ink: new Float32Array(0) }
@@ -90,8 +94,8 @@ let mapKey = ''
 
 /** The ink map for these settings; rebuilt only when they or the image change. */
 export function inkMap(settings: MapSettings) {
-  const { read, soften, glow, haze: hazy, gap: gapSize } = settings
-  const key = `${read} ${soften} ${glow} ${hazy} ${gapSize}`
+  const { read, soften, glow, haze: hazy, gap: gapSize, hollow } = settings
+  const key = `${read} ${soften} ${glow} ${hazy} ${gapSize} ${hollow}`
   if (map && raw.source === picture.source && mapKey === key) return map
 
   // Tone is how dark each pixel is over white paper, Shape is how opaque
@@ -140,6 +144,13 @@ export function inkMap(settings: MapSettings) {
     const near = blur(raw.ink, w, h, Math.max(1, Math.round((0.003 + (gapSize / 100) * 0.017) * longest)))
     gap = near.map((v, i) => Math.min(1, v * 2.5) * (1 - raw.ink[i]))
   }
+  let inside: Float32Array | null = null
+  if (hollow) {
+    // the shapes shrunk away from their (unsoftened) edges, so a band just inside each edge stays as
+    // an outline when the inside is hollowed out
+    const shrunk = blur(raw.ink, w, h, Math.max(1, Math.round(0.004 * longest)))
+    inside = shrunk.map((v) => Math.min(1, Math.max(0, (v - 0.75) * 4)))
+  }
   map = {
     w,
     h,
@@ -151,6 +162,8 @@ export function inkMap(settings: MapSettings) {
     hazeSums: haze && sums(haze, w, h),
     gap,
     gapSums: gap && sums(gap, w, h),
+    inside,
+    insideSums: inside && sums(inside, w, h),
   }
   mapKey = key
   return map

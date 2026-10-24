@@ -20,7 +20,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   dark rim along every edge of the design; its slider sets how wide. **Haze** darkens the paper near
   the design and leaves open space light, so line weight varies over the whole composition. **Gap**
   clears a band around the design (thin lines around heavy shapes, heavy around inverted ones), so it
-  stays legible inside the haze.
+  stays legible inside the haze. **Hollow** thins the inside of each shape towards blank paper,
+  leaving outlines; with Glow, Gap, Soften and short Steps these break into beads along the lines.
 - **Halftone**: the switch flips between the halftone and the original image (or press **H**).
   **Steps** cuts each line into pieces of one width; **Screen** works like a printer's line screen,
   each edge of a line following the image pixel by pixel, so lines taper to points and the design's
