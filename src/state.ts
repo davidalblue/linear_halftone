@@ -13,20 +13,20 @@ const DEFAULTS = {
   // Image: Tone reads dark areas as ink, Shape reads the opaque parts of a transparent PNG
   read: 'tone' as Read,
   invert: false,
-  scale: 125,
-  contrast: 63,
+  scale: 137,
+  contrast: 86,
   // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
-  brightness: 49,
+  brightness: 48,
   // Soften blurs the image first, so edges become ramps the lines taper along
-  soften: 19,
+  soften: 39,
   // Glow draws a rim of ink along every edge of the design, Glow Size wide
   glow: true,
-  glowSize: 8,
+  glowSize: 5,
   // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
   // whole composition
   haze: 0,
   // Gap clears a band around the design (thin lines around heavy shapes), so it stays legible in the haze
-  gap: 0,
+  gap: 100,
   // Hollow thins the inside of each shape towards the paper, leaving outlines (beads, with Glow)
   hollow: 0,
   // Halftone: off shows the original image
@@ -34,12 +34,12 @@ const DEFAULTS = {
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
   style: 'steps' as Style,
   direction: 'vertical' as Direction,
-  lines: 75,
+  lines: 68,
   // the thickest line, and the thinnest, as a share of the space between lines
-  weight: 54,
-  hairline: 12,
+  weight: 100,
+  hairline: 9,
   // how short the steps along each line are
-  detail: 55,
+  detail: 96,
   // how many line widths there are (0 = any width)
   levels: 8,
   edges: 'square' as Edges,
