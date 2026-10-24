@@ -25,6 +25,8 @@ const DEFAULTS = {
   // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
   // whole composition
   haze: 0,
+  // Gap clears a band around the design (thin lines around heavy shapes), so it stays legible in the haze
+  gap: 0,
   // Halftone: off shows the original image
   halftone: true,
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
@@ -62,6 +64,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   soften: [0, 100],
   glowSize: [0, 100],
   haze: [0, 100],
+  gap: [0, 100],
   lines: [8, 300],
   weight: [5, 100],
   hairline: [0, 50],

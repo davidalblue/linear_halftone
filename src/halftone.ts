@@ -68,20 +68,23 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0 })
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap })
   const haziness = state.haze / 100
   // u is across the lines, v along them
   const start = vertical ? (u: number, v: number) => pen.moveTo(u, v) : (u: number, v: number) => pen.moveTo(v, u)
   const point = vertical ? (u: number, v: number) => pen.lineTo(u, v) : (u: number, v: number) => pen.lineTo(v, u)
 
-  /** The tone, 0 to 1, where the image has `ink` (and `rim` from the glow, `haze` from the haze). */
-  const shade = (ink: number, rim: number, haze: number) => {
+  /** The tone, 0 to 1, where the image has `ink` (and `rim` from the glow, `haze` and `gap` from those). */
+  const shade = (ink: number, rim: number, haze: number, gap: number) => {
     let t = clamp((ink - 0.5) * contrast + 0.5)
     if (state.invert) t = 1 - t
     t = clamp(t + brightness)
     // the haze and the glow's rim are always ink, even inverted
     t += haziness * haze * (1 - t)
-    return t + rim * (1 - t)
+    t += rim * (1 - t)
+    // the Gap pushes the band around the design to the opposite of the design (thin lines around heavy
+    // shapes, heavy around inverted ones), so the shapes stand clear of the haze and the rim's outer half
+    return t + gap * ((state.invert ? 1 : 0) - t)
   }
   // Screen reads the tone at every point, so it's worked out once for the whole map
   const tones = state.style === 'screen' ? toneMap(map, `${contrast} ${brightness} ${haziness} ${state.invert}`, shade) : null
@@ -132,7 +135,7 @@ type Line = {
   space: number
   along: number
   look: ReturnType<typeof reader>
-  shade(ink: number, rim: number, haze: number): number
+  shade(ink: number, rim: number, haze: number, gap: number): number
   width(t: number, swell: number, shown: number): number
   swellAt(centre: number, v: number): number
   start(u: number, v: number): void
@@ -150,7 +153,7 @@ function stepLine({ centre, drift, shown, space, along, look, shade, width, swel
   for (let j = 0; j < steps; j++) {
     const v = j * step + drift
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
-    widths[j] = width(shade(ink, look.rim, look.haze), swellAt(centre, j * step), shown)
+    widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown)
     if (widths[j] > 0) any = true
   }
   if (!any) return
@@ -281,7 +284,7 @@ function reveal(time: number, at: number, amount: number) {
 
 /**
  * Reads the ink map at places on the canvas, given across and along the lines: `box` averages a
- * box, leaving the glow's rim there in `rim` and the haze in `haze`; `tone` blends the nearest
+ * box, leaving the glow's rim there in `rim`, the haze in `haze` and the gap in `gap`; `tone` blends the nearest
  * pixels of the tone map. Outside the
  * image counts as blank paper.
  */
@@ -292,6 +295,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
   const look = {
     rim: 0,
     haze: 0,
+    gap: 0,
     box(u0: number, u1: number, v0: number, v1: number) {
       const [x0, x1, y0, y1] = vertical ? [u0, u1, v0, v1] : [v0, v1, u0, u1]
       // the box in map pixels, at least one pixel each way
@@ -308,10 +312,12 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       d = Math.max(0, Math.min(map.h, d))
       look.rim = 0
       look.haze = 0
+      look.gap = 0
       if (a === b || c === d) return 0
       const total = (s: Float64Array) => (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
       if (map.rimSums) look.rim = total(map.rimSums)
       if (map.hazeSums) look.haze = total(map.hazeSums)
+      if (map.gapSums) look.gap = total(map.gapSums)
       return total(map.inkSums)
     },
     tone(u: number, v: number) {
@@ -340,11 +346,11 @@ type Tones = { map: InkMap | null; key: string; values: Float32Array; outside: n
 let tones: Tones = { map: null, key: '', values: new Float32Array(0), outside: 0 }
 
 /** The tone map for `map` shaded with `shade`; rebuilt only when the map or the shading (`key`) changes. */
-function toneMap(map: InkMap, key: string, shade: (ink: number, rim: number, haze: number) => number) {
+function toneMap(map: InkMap, key: string, shade: (ink: number, rim: number, haze: number, gap: number) => number) {
   if (tones.map === map && tones.key === key) return tones
   const values = new Float32Array(map.w * map.h)
-  for (let i = 0; i < values.length; i++) values[i] = shade(map.ink[i], map.rim ? map.rim[i] : 0, map.haze ? map.haze[i] : 0)
-  tones = { map, key, values, outside: shade(0, 0, 0) }
+  for (let i = 0; i < values.length; i++) values[i] = shade(map.ink[i], map.rim ? map.rim[i] : 0, map.haze ? map.haze[i] : 0, map.gap ? map.gap[i] : 0)
+  tones = { map, key, values, outside: shade(0, 0, 0, 0) }
   return tones
 }
 

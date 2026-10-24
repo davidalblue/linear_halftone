@@ -18,7 +18,9 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   transparency. **Invert** swaps ink and paper. **Brightness** can make blank paper a mid tone.
   **Soften** blurs the image first, so edges become ramps the lines taper along. **Glow** draws a
   dark rim along every edge of the design; its slider sets how wide. **Haze** darkens the paper near
-  the design and leaves open space light, so line weight varies over the whole composition.
+  the design and leaves open space light, so line weight varies over the whole composition. **Gap**
+  clears a band around the design (thin lines around heavy shapes, heavy around inverted ones), so it
+  stays legible inside the haze.
 - **Halftone**: the switch flips between the halftone and the original image (or press **H**).
   **Steps** cuts each line into pieces of one width; **Screen** works like a printer's line screen,
   each edge of a line following the image pixel by pixel, so lines taper to points and the design's
