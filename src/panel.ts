@@ -81,6 +81,8 @@ export function initPanel(actions: Actions) {
     // Screen follows the image every pixel, so it has no steps to size
     num('Detail', 'detail', () => state.style === 'steps', 'Fine'),
     num('Levels', 'levels', undefined, undefined, (v) => (v ? String(v) : 'Any')),
+    // Liquid smooths Screen's edges; Steps has its own (Square or Sloped)
+    num('Liquid', 'liquid', () => state.style === 'screen', '–'),
   )
   const edges: { value: Edges; label: string }[] = [
     { value: 'square', label: 'Square' },

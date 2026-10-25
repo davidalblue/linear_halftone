@@ -25,7 +25,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   **Steps** cuts each line into pieces of one width; **Screen** works like a printer's line screen,
   each edge of a line following the image pixel by pixel, so lines taper to points and the design's
   edges cut through them. Lines sets how many; Weight and Hairline the thickest and thinnest line; Detail how short the steps
-  are (Steps only); Levels how many widths there are (Any = smooth); Square or Sloped steps.
+  are (Steps only); Levels how many widths there are (Any = smooth); Square or Sloped steps;
+  Liquid (Screen only) smooths the edges so pinches and joins flow in curves.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random.

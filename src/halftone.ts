@@ -230,6 +230,13 @@ function screenLine({ centre, drift, shown, space, along, look, shade, width, sw
     if (right[r] > left[r]) any = true
   }
   if (!any) return
+  // Liquid: each edge is smoothed along the line, up to a third of the gap between lines, so
+  // pinches and joins flow in curves instead of stepping pixel by pixel while the design stays sharp
+  const reach = Math.round(((state.liquid / 100) * space * 0.35) / rowStep)
+  if (reach > 0) {
+    smoothRun(left, reach)
+    smoothRun(right, reach)
+  }
 
   // down the left side of the line, then back up the right, skipping points along straight runs
   const at = (r: number) => Math.min(along, r * rowStep)
@@ -238,6 +245,24 @@ function screenLine({ centre, drift, shown, space, along, look, shade, width, sw
   for (let r = 1; r < rows; r++) if (bend(left, r)) point(centre + left[r], at(r))
   for (let r = rows - 1; r >= 0; r--) if (bend(right, r)) point(centre + right[r], at(r))
   pen.closePath()
+}
+
+/** Smooths `values` in place: two box blurs `r` either side, the ends held at their own value. */
+function smoothRun(values: Float32Array, r: number) {
+  const n = values.length
+  const tmp = new Float32Array(n)
+  const at = (src: Float32Array, i: number) => src[Math.min(n - 1, Math.max(0, i))]
+  for (const [src, dst] of [
+    [values, tmp],
+    [tmp, values],
+  ]) {
+    let sum = 0
+    for (let j = -r; j <= r; j++) sum += at(src, j)
+    for (let i = 0; i < n; i++) {
+      dst[i] = sum / (2 * r + 1)
+      sum += at(src, i + r + 1) - at(src, i - r)
+    }
+  }
 }
 
 /**

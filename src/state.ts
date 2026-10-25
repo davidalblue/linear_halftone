@@ -40,6 +40,8 @@ const DEFAULTS = {
   detail: 96,
   // how many line widths there are (0 = any width)
   levels: 8,
+  // Screen only: how much each line's edges are smoothed, so its pinches and joins flow
+  liquid: 0,
   edges: 'square' as Edges,
   // Motion
   motion: false,
@@ -70,6 +72,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   hairline: [0, 50],
   detail: [0, 100],
   levels: [0, 8],
+  liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],
 }
