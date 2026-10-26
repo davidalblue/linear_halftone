@@ -98,6 +98,7 @@ export function initPanel(actions: Actions) {
     { value: 'drift', label: 'Drift' },
     { value: 'reveal', label: 'Reveal' },
     { value: 'blobs', label: 'Blobs' },
+    { value: 'fall', label: 'Fall' },
   ]
   choice($('#modes'), modes, { get: () => state.mode, set: (v) => (state.mode = v) })
   const moving = () => state.motion

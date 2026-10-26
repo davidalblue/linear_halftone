@@ -2,7 +2,7 @@ export type Read = 'tone' | 'shape'
 export type Direction = 'vertical' | 'horizontal'
 export type Style = 'steps' | 'screen'
 export type Edges = 'square' | 'sloped'
-export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs'
+export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs' | 'fall'
 
 /** Everything the panel controls. Reset puts it back to these, except the canvas size. */
 const DEFAULTS = {
@@ -106,6 +106,6 @@ export function randomize() {
   state.detail = between(20, 90)
   state.levels = Math.random() < 0.25 ? 0 : between(2, 6)
   state.edges = pick<Edges>(['square', 'sloped'])
-  state.mode = pick<Mode>(['wave', 'drift', 'reveal', 'blobs'])
+  state.mode = pick<Mode>(['wave', 'drift', 'reveal', 'blobs', 'fall'])
   state.amount = between(20, 80)
 }

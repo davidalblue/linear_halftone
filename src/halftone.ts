@@ -88,12 +88,13 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   }
   const look = reader(map, placement(w, h), vertical)
   /** A line's width where the tone is `t`. */
-  const width = (t: number, swell: number, shown: number) => {
+  const width = (t: number, swell: number, shown: number, fade = 1) => {
     // Wave and Blobs: heavier ink where they pass, mostly over the design so it stays legible
     if (swell) t = clamp(t + swell * (0.3 + 0.7 * t))
     t *= shown
     if (state.levels) t = Math.round(t * state.levels) / state.levels
-    return thinnest + (widest - thinnest) * t
+    // Fall's fade takes the whole line away, hairline too
+    return (thinnest + (widest - thinnest) * t) * fade
   }
   const blobs = state.mode === 'blobs' && amount ? blobsAt(time, w, h) : null
   /** How much Wave or Blobs thicken (or thin) the line at `centre` where it passes `v`. */
@@ -122,7 +123,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         ? amount * along * 0.05 * (0.7 * Math.sin(Math.PI * 2 * time + i * 0.5) + 0.3 * Math.sin(Math.PI * 1.2 * time - i * 0.17))
         : 0
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? i / (count - 1) : 0, amount) : 1
-    shape({ centre, drift, shown, space, along, look, shade, width, swellAt, start, point, pen })
+    const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
+    shape({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
 
@@ -130,11 +132,13 @@ type Line = {
   centre: number
   drift: number
   shown: number
+  /** Fall: how much of the line is left at `v` along it (1 = all of it), or null when not falling */
+  fadeAt: ((v: number) => number) | null
   space: number
   along: number
   look: ReturnType<typeof reader>
   shade(ink: number, rim: number, haze: number, gap: number): number
-  width(t: number, swell: number, shown: number): number
+  width(t: number, swell: number, shown: number, fade?: number): number
   swellAt(centre: number, v: number): number
   start(u: number, v: number): void
   point(u: number, v: number): void
@@ -142,7 +146,7 @@ type Line = {
 }
 
 /** Steps: the line in pieces, each as wide as the average ink over it. */
-function stepLine({ centre, drift, shown, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function stepLine({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
   const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
   const steps = Math.ceil(along / step)
@@ -151,7 +155,8 @@ function stepLine({ centre, drift, shown, space, along, look, shade, width, swel
   for (let j = 0; j < steps; j++) {
     const v = j * step + drift
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
-    widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown)
+    const fade = fadeAt ? fadeAt((j + 0.5) * step) : 1
+    widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown, fade)
     if (widths[j] > 0) any = true
   }
   if (!any) return
@@ -191,7 +196,7 @@ function stepLine({ centre, drift, shown, space, along, look, shade, width, swel
  * the first such point to the last, so each edge follows the image on its own: an edge of the
  * design can cut through a line, and lines taper to points as they thin out.
  */
-function screenLine({ centre, drift, shown, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function screenLine({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // points across the line, an odd number so one sits on its middle
   const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
   const offsets = new Float32Array(across)
@@ -209,12 +214,13 @@ function screenLine({ centre, drift, shown, space, along, look, shade, width, sw
   for (let r = 0; r < rows; r++) {
     const v = Math.min(along, r * rowStep)
     const swell = swellAt(centre, v)
+    const fade = fadeAt ? fadeAt(v) : 1
     let first = -1
     let last = -1
     for (let k = 0; k < across; k++) {
       const ink = look.point(centre + offsets[k], v + drift)
       // how far inside the line this point is (negative: outside)
-      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown) / 2 - Math.abs(offsets[k])
+      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown, fade) / 2 - Math.abs(offsets[k])
       if (room[k] >= 0) {
         if (first < 0) first = k
         last = k
@@ -287,6 +293,30 @@ function blobsAt(time: number, w: number, h: number) {
     const radius = b.size * Math.min(w, h) * (1 + 0.25 * Math.sin(time * b.pulse[0] + b.pulse[1]))
     return { x: wander(b.x) * w, y: wander(b.y) * h, fade: 1 / (2 * radius * radius) }
   })
+}
+
+/** Fall: each line's own start and pace, picked at random when the page opens. */
+const FALL_PATHS = Array.from({ length: 400 }, () => ({ start: Math.random(), pace: Math.random() }))
+
+/**
+ * Fall: a gap falls down line `i` like a falling star: the line disappears from the top down and
+ * reappears behind the gap as it goes, then rests whole until the next one. Both ends of the gap
+ * fade over a tail, so it reads as a streak. Amount 0 drops one gap across every line together;
+ * 100 gives each line its own start and a pace up to a quarter faster or slower. Returns how much
+ * of the line is left at `v` along it.
+ */
+function fall(time: number, i: number, along: number, amount: number) {
+  const path = FALL_PATHS[i % FALL_PATHS.length]
+  const pace = 1 + amount * (path.pace - 0.5) * 0.5
+  const phase = (((time * 0.5 * pace + amount * path.start) % 1) + 1) % 1
+  // the gap falls for the first 60% of each turn; the line rests whole for the rest
+  if (phase >= 0.6) return null
+  const gap = along * 0.45
+  const tail = along * 0.12
+  // the gap's lower end starts a tail above the top and its upper end ends a tail below the bottom
+  const lower = -tail + (phase / 0.6) * (along + gap + 2 * tail)
+  const upper = lower - gap
+  return (v: number) => Math.max(smooth(clamp((v - lower) / tail)), smooth(clamp((upper - v) / tail)))
 }
 
 /**
