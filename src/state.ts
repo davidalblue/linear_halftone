@@ -1,6 +1,7 @@
 export type Read = 'tone' | 'shape'
 export type Style = 'steps' | 'screen'
 export type Edges = 'square' | 'sloped'
+export type CurveFrom = 'margins' | 'even' | 'middle'
 export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs' | 'fall'
 
 /** Everything the panel controls. Reset puts it back to these, except the canvas size. */
@@ -32,6 +33,9 @@ const DEFAULTS = {
   style: 'steps' as Style,
   // Angle: the lines turn all the way round, upright at 0 and flat at 90; the image stays put
   angle: 0,
+  // Curve bends the lines (not the image), either way; Curve From sets where along them the bend is
+  curve: 0,
+  curveFrom: 'middle' as CurveFrom,
   lines: 68,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -73,6 +77,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   detail: [0, 100],
   levels: [0, 8],
   angle: [0, 360],
+  curve: [-100, 100],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],

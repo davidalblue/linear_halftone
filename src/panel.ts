@@ -1,5 +1,5 @@
 import { isCutOut, loadImage, picture } from './image'
-import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
+import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type CurveFrom, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
 import { $, addSync, button, choice, colour, hint, numberField, onPanelChange, slider, syncPanel, toggle, type Bind } from './ui'
 
 /** Binds a slider to a number in the state, over its range. */
@@ -96,6 +96,15 @@ export function initPanel(actions: Actions) {
     { get: () => String(state.angle), set: (v) => (state.angle = Number(v)) },
   )
   $('#angle-sliders').append(num('Angle', 'angle', undefined, undefined, (v) => `${v}°`))
+
+  // Curve: how much the lines bend, and where along them
+  $('#curve-sliders').append(num('Curve', 'curve'))
+  const curveFroms: { value: CurveFrom; label: string }[] = [
+    { value: 'margins', label: 'Margins' },
+    { value: 'even', label: 'Even' },
+    { value: 'middle', label: 'Middle' },
+  ]
+  choice($('#curve-from'), curveFroms, { get: () => state.curveFrom, set: (v) => (state.curveFrom = v) })
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })

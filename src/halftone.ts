@@ -83,14 +83,40 @@ function turn(angle: number, w: number, h: number) {
   }
 }
 
+/**
+ * Bends `frame`'s lines by the Curve: every line shifts sideways by the same amount at each point
+ * along it, so they stay evenly spaced. Where the bend happens is set by Margins (straight through
+ * the middle, bending towards the ends), Even (one arc) or Middle (straight ends, a bulge in the
+ * middle). At Curve 100 the most a line moves is a quarter of its length. `shift` is that most.
+ */
+function curve(frame: ReturnType<typeof turn>) {
+  const most = (state.curve / 100) * frame.along * 0.25
+  if (!most) return { ...frame, shift: 0 }
+  const profile = {
+    margins: (t: number) => Math.max(0, (Math.abs(2 * t - 1) - 0.3) / 0.7) ** 2,
+    even: (t: number) => 4 * t * (1 - t),
+    middle: (t: number) => (1 - Math.cos(Math.PI * 2 * t)) / 2,
+  }[state.curveFrom]
+  const sideways = (v: number) => most * profile(clamp(v / frame.along))
+  return {
+    ...frame,
+    upright: false,
+    shift: Math.abs(most),
+    x: (u: number, v: number) => frame.x(u + sideways(v), v),
+    y: (u: number, v: number) => frame.y(u + sideways(v), v),
+  }
+}
+
 /** Traces every line's outline with `pen`. */
 function trace(pen: Pen, w: number, h: number, time: number) {
   // u is across the lines and v along them. At Angle 0 they're the canvas's x and y; turning the
   // Angle turns the lines, and the u × v area grows to keep the whole canvas covered.
-  const frame = turn(state.angle, w, h)
+  const frame = curve(turn(state.angle, w, h))
   const { across, along } = frame
   const count = state.lines
   const space = across / count
+  // curved lines shift sideways, so extra lines on each side keep the canvas's edges covered
+  const extra = frame.shift ? Math.ceil(frame.shift / space) + 1 : 0
   const widest = space * (state.weight / 100)
   const thinnest = Math.min(widest, space * (state.hairline / 100))
   const contrast = 2 ** ((state.contrast - 50) / 20)
@@ -142,16 +168,16 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   }
 
   const shape = state.style === 'screen' ? screenLine : stepLine
-  for (let i = 0; i < count; i++) {
+  for (let i = -extra; i < count + extra; i++) {
     const centre = (i + 0.5) * space
     // Drift slides what each line shows up and down, each line a little behind its neighbour
     const drift =
       state.mode === 'drift' && amount
         ? amount * along * 0.05 * (0.7 * Math.sin(Math.PI * 2 * time + i * 0.5) + 0.3 * Math.sin(Math.PI * 1.2 * time - i * 0.17))
         : 0
-    const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? i / (count - 1) : 0, amount) : 1
+    const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
-    shape({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen })
+    shape({ centre, drift, shown, fadeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
 
@@ -161,6 +187,8 @@ type Line = {
   shown: number
   /** Fall: how much of the line is left at `v` along it (1 = all of it), or null when not falling */
   fadeAt: ((v: number) => number) | null
+  /** whether the lines bend, so straight runs along them can't be drawn as one segment */
+  curved: boolean
   space: number
   along: number
   look: ReturnType<typeof reader>
@@ -173,7 +201,7 @@ type Line = {
 }
 
 /** Steps: the line in pieces, each as wide as the average ink over it. */
-function stepLine({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function stepLine({ centre, drift, shown, fadeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
   const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
   const steps = Math.ceil(along / step)
@@ -194,20 +222,20 @@ function stepLine({ centre, drift, shown, fadeAt, space, along, look, shade, wid
   start(centre - first / 2, 0)
   if (state.edges === 'square') {
     for (let j = 1; j < steps; j++) {
-      if (widths[j] === widths[j - 1]) continue
+      if (widths[j] === widths[j - 1] && !curved) continue
       point(centre - widths[j - 1] / 2, j * step)
       point(centre - widths[j] / 2, j * step)
     }
     point(centre - last / 2, along)
     point(centre + last / 2, along)
     for (let j = steps - 1; j > 0; j--) {
-      if (widths[j] === widths[j - 1]) continue
+      if (widths[j] === widths[j - 1] && !curved) continue
       point(centre + widths[j] / 2, j * step)
       point(centre + widths[j - 1] / 2, j * step)
     }
   } else {
     // Sloped: each step's width is reached at its middle, so changes ramp over one step
-    const corner = (j: number) => j === 0 || j === steps - 1 || widths[j] !== widths[j - 1] || widths[j] !== widths[j + 1]
+    const corner = (j: number) => curved || j === 0 || j === steps - 1 || widths[j] !== widths[j - 1] || widths[j] !== widths[j + 1]
     for (let j = 0; j < steps; j++) if (corner(j)) point(centre - widths[j] / 2, (j + 0.5) * step)
     point(centre - last / 2, along)
     point(centre + last / 2, along)
@@ -223,7 +251,7 @@ function stepLine({ centre, drift, shown, fadeAt, space, along, look, shade, wid
  * the first such point to the last, so each edge follows the image on its own: an edge of the
  * design can cut through a line, and lines taper to points as they thin out.
  */
-function screenLine({ centre, drift, shown, fadeAt, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function screenLine({ centre, drift, shown, fadeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // points across the line, an odd number so one sits on its middle
   const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
   const offsets = new Float32Array(across)
@@ -273,7 +301,7 @@ function screenLine({ centre, drift, shown, fadeAt, space, along, look, shade, w
 
   // down the left side of the line, then back up the right, skipping points along straight runs
   const at = (r: number) => Math.min(along, r * rowStep)
-  const bend = (edges: Float32Array, r: number) => r === 0 || r === rows - 1 || edges[r] !== edges[r - 1] || edges[r] !== edges[r + 1]
+  const bend = (edges: Float32Array, r: number) => curved || r === 0 || r === rows - 1 || edges[r] !== edges[r - 1] || edges[r] !== edges[r + 1]
   start(centre + left[0], 0)
   for (let r = 1; r < rows; r++) if (bend(left, r)) point(centre + left[r], at(r))
   for (let r = rows - 1; r >= 0; r--) if (bend(right, r)) point(centre + right[r], at(r))
@@ -333,7 +361,7 @@ const FALL_PATHS = Array.from({ length: 400 }, () => ({ start: Math.random(), pa
  * of the line is left at `v` along it.
  */
 function fall(time: number, i: number, along: number, amount: number) {
-  const path = FALL_PATHS[i % FALL_PATHS.length]
+  const path = FALL_PATHS[((i % FALL_PATHS.length) + FALL_PATHS.length) % FALL_PATHS.length]
   const pace = 1 + amount * (path.pace - 0.5) * 0.5
   const phase = (((time * 0.5 * pace + amount * path.start) % 1) + 1) % 1
   // the gap falls for the first 60% of each turn; the line rests whole for the rest

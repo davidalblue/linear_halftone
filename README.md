@@ -29,6 +29,9 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   Liquid (Screen only) smooths the edges so pinches and joins flow in curves.
 - **Angle**: turns the lines all the way round, from 0° to 360° (Vertical is 0°, Horizontal 90°),
   while the image stays where it is. Motion runs along the lines, so at 180° Fall falls upward.
+- **Curve**: bends the lines (not the image) either way, −100 to 100. **Margins** keeps them
+  straight through the middle and bends them towards their ends, **Even** bends them in one arc,
+  **Middle** keeps the ends straight and bulges the middle.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the
