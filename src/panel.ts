@@ -1,5 +1,5 @@
 import { isCutOut, loadImage, picture } from './image'
-import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type Direction, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
+import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
 import { $, addSync, button, choice, colour, hint, numberField, onPanelChange, slider, syncPanel, toggle, type Bind } from './ui'
 
 /** Binds a slider to a number in the state, over its range. */
@@ -69,11 +69,6 @@ export function initPanel(actions: Actions) {
     { value: 'screen', label: 'Screen' },
   ]
   choice($('#style'), styles, { get: () => state.style, set: (v) => (state.style = v) })
-  const directions: { value: Direction; label: string }[] = [
-    { value: 'vertical', label: 'Vertical' },
-    { value: 'horizontal', label: 'Horizontal' },
-  ]
-  choice($('#direction'), directions, { get: () => state.direction, set: (v) => (state.direction = v) })
   $('#line-sliders').append(
     num('Lines', 'lines'),
     num('Weight', 'weight'),
@@ -90,6 +85,17 @@ export function initPanel(actions: Actions) {
   ]
   choice($('#edges'), edges, { get: () => state.edges, set: (v) => (state.edges = v) })
   addSync(() => $('#edges').querySelectorAll('button').forEach((b) => ((b as HTMLButtonElement).disabled = state.style === 'screen')))
+
+  // Angle: Vertical and Horizontal are 0 and 90
+  choice(
+    $('#direction'),
+    [
+      { value: '0', label: 'Vertical' },
+      { value: '90', label: 'Horizontal' },
+    ],
+    { get: () => String(state.angle), set: (v) => (state.angle = Number(v)) },
+  )
+  $('#angle-sliders').append(num('Angle', 'angle', undefined, undefined, (v) => `${v}°`))
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })

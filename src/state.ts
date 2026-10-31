@@ -1,5 +1,4 @@
 export type Read = 'tone' | 'shape'
-export type Direction = 'vertical' | 'horizontal'
 export type Style = 'steps' | 'screen'
 export type Edges = 'square' | 'sloped'
 export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs' | 'fall'
@@ -31,7 +30,8 @@ const DEFAULTS = {
   halftone: true,
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
   style: 'steps' as Style,
-  direction: 'vertical' as Direction,
+  // Angle: the lines turn from upright (0) to lying flat (90); the image stays put
+  angle: 0,
   lines: 68,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -72,6 +72,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   hairline: [0, 50],
   detail: [0, 100],
   levels: [0, 8],
+  angle: [0, 90],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],

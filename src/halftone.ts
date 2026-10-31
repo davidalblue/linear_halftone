@@ -55,12 +55,37 @@ export function halftoneSvg(w: number, h: number, time: number) {
   ].join('\n')
 }
 
+type Frame = ReturnType<typeof turn>
+
+/**
+ * The lines' frame for a w × h canvas at `angle` degrees: lines run along (sin, cos) and are spaced
+ * out along (cos, −sin), centred on the canvas. `across` × `along` is the turned area that just
+ * covers the canvas, and `x`, `y` place a point (u across, v along) on the canvas.
+ */
+function turn(angle: number, w: number, h: number) {
+  // exact at the ends, so 0 is the canvas's own x and y
+  const sin = angle === 0 ? 0 : angle === 90 ? 1 : Math.sin((angle * Math.PI) / 180)
+  const cos = angle === 0 ? 1 : angle === 90 ? 0 : Math.cos((angle * Math.PI) / 180)
+  const across = w * cos + h * sin
+  const along = w * sin + h * cos
+  const u0 = across / 2
+  const v0 = along / 2
+  return {
+    sin,
+    cos,
+    across,
+    along,
+    x: (u: number, v: number) => (sin ? w / 2 + (u - u0) * cos + (v - v0) * sin : u),
+    y: (u: number, v: number) => (sin ? h / 2 - (u - u0) * sin + (v - v0) * cos : v),
+  }
+}
+
 /** Traces every line's outline with `pen`. */
 function trace(pen: Pen, w: number, h: number, time: number) {
-  const vertical = state.direction === 'vertical'
-  // lines run along one side of the canvas and are spaced out across the other
-  const across = vertical ? w : h
-  const along = vertical ? h : w
+  // u is across the lines and v along them. At Angle 0 they're the canvas's x and y; turning the
+  // Angle towards 90 turns the lines, and the u × v area grows to keep the whole canvas covered.
+  const frame = turn(state.angle, w, h)
+  const { across, along } = frame
   const count = state.lines
   const space = across / count
   const widest = space * (state.weight / 100)
@@ -70,9 +95,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const amount = state.motion ? state.amount / 100 : 0
   const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap })
   const haziness = state.haze / 100
-  // u is across the lines, v along them
-  const start = vertical ? (u: number, v: number) => pen.moveTo(u, v) : (u: number, v: number) => pen.moveTo(v, u)
-  const point = vertical ? (u: number, v: number) => pen.lineTo(u, v) : (u: number, v: number) => pen.lineTo(v, u)
+  const start = (u: number, v: number) => pen.moveTo(frame.x(u, v), frame.y(u, v))
+  const point = (u: number, v: number) => pen.lineTo(frame.x(u, v), frame.y(u, v))
 
   /** The tone, 0 to 1, where the image has `ink` (and `rim` from the glow, `haze` and `gap` from those). */
   const shade = (ink: number, rim: number, haze: number, gap: number) => {
@@ -86,7 +110,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     // shapes, heavy around inverted ones), so the shapes stand clear of the haze and the rim's outer half
     return t + gap * ((state.invert ? 1 : 0) - t)
   }
-  const look = reader(map, placement(w, h), vertical)
+  const look = reader(map, placement(w, h), frame)
   /** A line's width where the tone is `t`. */
   const width = (t: number, swell: number, shown: number, fade = 1) => {
     // Wave and Blobs: heavier ink where they pass, mostly over the design so it stays legible
@@ -103,8 +127,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     if (state.mode === 'wave') return amount * 0.5 * Math.sin(Math.PI * 2 * (time - (1.2 * centre) / across - (0.4 * v) / along))
     if (!blobs) return 0
     // inside a blob the lines swell; between blobs they're left as they are
-    const x = vertical ? centre : v
-    const y = vertical ? v : centre
+    const x = frame.x(centre, v)
+    const y = frame.y(centre, v)
     let field = 0
     for (const b of blobs) {
       const dx = x - b.x
@@ -340,7 +364,7 @@ function reveal(time: number, at: number, amount: number) {
  * box, `point` blends the nearest map pixels. Both leave the glow's rim there in `rim`, the haze in
  * `haze` and the gap in `gap`. Outside the image counts as blank paper.
  */
-function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, vertical: boolean) {
+function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, frame: Frame) {
   const sx = map.w / at.w
   const sy = map.h / at.h
   const row = map.w + 1
@@ -349,7 +373,24 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
     haze: 0,
     gap: 0,
     box(u0: number, u1: number, v0: number, v1: number) {
-      const [x0, x1, y0, y1] = vertical ? [u0, u1, v0, v1] : [v0, v1, u0, u1]
+      let x0 = u0
+      let x1 = u1
+      let y0 = v0
+      let y1 = v1
+      if (frame.sin) {
+        // turned: an upright box of the same size around the same middle, its sides blended between
+        // the turned box's width and length as the lines turn
+        const cx = frame.x((u0 + u1) / 2, (v0 + v1) / 2)
+        const cy = frame.y((u0 + u1) / 2, (v0 + v1) / 2)
+        const c2 = frame.cos * frame.cos
+        const s2 = frame.sin * frame.sin
+        const bw = (u1 - u0) * c2 + (v1 - v0) * s2
+        const bh = (u1 - u0) * s2 + (v1 - v0) * c2
+        x0 = cx - bw / 2
+        x1 = cx + bw / 2
+        y0 = cy - bh / 2
+        y1 = cy + bh / 2
+      }
       // the box in map pixels, at least one pixel each way
       let a = Math.round((x0 - at.x) * sx)
       let b = Math.round((x1 - at.x) * sx)
@@ -373,8 +414,8 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       return total(map.inkSums)
     },
     point(u: number, v: number) {
-      const mx = ((vertical ? u : v) - at.x) * sx - 0.5
-      const my = ((vertical ? v : u) - at.y) * sy - 0.5
+      const mx = (frame.x(u, v) - at.x) * sx - 0.5
+      const my = (frame.y(u, v) - at.y) * sy - 0.5
       const x0 = Math.floor(mx)
       const y0 = Math.floor(my)
       const fx = mx - x0
