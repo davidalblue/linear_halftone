@@ -27,8 +27,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   edges cut through them. Lines sets how many; Weight and Hairline the thickest and thinnest line; Detail how short the steps
   are (Steps only); Levels how many widths there are (Any = smooth); Square or Sloped steps;
   Liquid (Screen only) smooths the edges so pinches and joins flow in curves.
-- **Angle**: turns the lines from upright (0°, Vertical) to lying flat (90°, Horizontal) while the
-  image stays where it is.
+- **Angle**: turns the lines all the way round, from 0° to 360° (Vertical is 0°, Horizontal 90°),
+  while the image stays where it is. Motion runs along the lines, so at 180° Fall falls upward.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the

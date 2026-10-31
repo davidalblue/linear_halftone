@@ -58,32 +58,35 @@ export function halftoneSvg(w: number, h: number, time: number) {
 type Frame = ReturnType<typeof turn>
 
 /**
- * The lines' frame for a w × h canvas at `angle` degrees: lines run along (sin, cos) and are spaced
- * out along (cos, −sin), centred on the canvas. `across` × `along` is the turned area that just
- * covers the canvas, and `x`, `y` place a point (u across, v along) on the canvas.
+ * The lines' frame for a w × h canvas at `angle` degrees (0–360): lines run along (sin, cos) and
+ * are spaced out along (cos, −sin), centred on the canvas. `across` × `along` is the turned area
+ * that just covers the canvas, and `x`, `y` place a point (u across, v along) on the canvas.
  */
 function turn(angle: number, w: number, h: number) {
-  // exact at the ends, so 0 is the canvas's own x and y
-  const sin = angle === 0 ? 0 : angle === 90 ? 1 : Math.sin((angle * Math.PI) / 180)
-  const cos = angle === 0 ? 1 : angle === 90 ? 0 : Math.cos((angle * Math.PI) / 180)
-  const across = w * cos + h * sin
-  const along = w * sin + h * cos
+  // exact at the quarter turns, so 0 (and 360) is the canvas's own x and y
+  const quarter = { 0: [0, 1], 90: [1, 0], 180: [0, -1], 270: [-1, 0] }[angle % 360]
+  const sin = quarter ? quarter[0] : Math.sin((angle * Math.PI) / 180)
+  const cos = quarter ? quarter[1] : Math.cos((angle * Math.PI) / 180)
+  const upright = sin === 0 && cos === 1
+  const across = w * Math.abs(cos) + h * Math.abs(sin)
+  const along = w * Math.abs(sin) + h * Math.abs(cos)
   const u0 = across / 2
   const v0 = along / 2
   return {
     sin,
     cos,
+    upright,
     across,
     along,
-    x: (u: number, v: number) => (sin ? w / 2 + (u - u0) * cos + (v - v0) * sin : u),
-    y: (u: number, v: number) => (sin ? h / 2 - (u - u0) * sin + (v - v0) * cos : v),
+    x: (u: number, v: number) => (upright ? u : w / 2 + (u - u0) * cos + (v - v0) * sin),
+    y: (u: number, v: number) => (upright ? v : h / 2 - (u - u0) * sin + (v - v0) * cos),
   }
 }
 
 /** Traces every line's outline with `pen`. */
 function trace(pen: Pen, w: number, h: number, time: number) {
   // u is across the lines and v along them. At Angle 0 they're the canvas's x and y; turning the
-  // Angle towards 90 turns the lines, and the u × v area grows to keep the whole canvas covered.
+  // Angle turns the lines, and the u × v area grows to keep the whole canvas covered.
   const frame = turn(state.angle, w, h)
   const { across, along } = frame
   const count = state.lines
@@ -377,7 +380,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       let x1 = u1
       let y0 = v0
       let y1 = v1
-      if (frame.sin) {
+      if (!frame.upright) {
         // turned: an upright box of the same size around the same middle, its sides blended between
         // the turned box's width and length as the lines turn
         const cx = frame.x((u0 + u1) / 2, (v0 + v1) / 2)

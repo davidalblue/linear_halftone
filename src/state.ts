@@ -30,7 +30,7 @@ const DEFAULTS = {
   halftone: true,
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
   style: 'steps' as Style,
-  // Angle: the lines turn from upright (0) to lying flat (90); the image stays put
+  // Angle: the lines turn all the way round, upright at 0 and flat at 90; the image stays put
   angle: 0,
   lines: 68,
   // the thickest line, and the thinnest, as a share of the space between lines
@@ -72,7 +72,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   hairline: [0, 50],
   detail: [0, 100],
   levels: [0, 8],
-  angle: [0, 90],
+  angle: [0, 360],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],
