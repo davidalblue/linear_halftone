@@ -122,7 +122,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap })
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 })
   const haziness = state.haze / 100
   const start = (u: number, v: number) => pen.moveTo(frame.x(u, v), frame.y(u, v))
   const point = (u: number, v: number) => pen.lineTo(frame.x(u, v), frame.y(u, v))
@@ -167,6 +167,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     return amount * 0.8 * Math.min(1, field)
   }
 
+  const cut = state.fragment ? fragments(state.fragment / 100, state.fragmentSeed, frame, space, Math.min(w, h)) : null
   const shape = state.style === 'screen' ? screenLine : stepLine
   for (let i = -extra; i < count + extra; i++) {
     const centre = (i + 0.5) * space
@@ -177,7 +178,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         : 0
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
-    shape({ centre, drift, shown, fadeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
+    const cutAt = cut ? (v: number) => cut(i, centre, v) : null
+    shape({ centre, drift, shown, fadeAt, cutAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
 
@@ -187,6 +189,8 @@ type Line = {
   shown: number
   /** Fall: how much of the line is left at `v` along it (1 = all of it), or null when not falling */
   fadeAt: ((v: number) => number) | null
+  /** Fragment: how much of the line is cut away at `v` along it, wherever it's clear of the design */
+  cutAt: ((v: number) => number) | null
   /** whether the lines bend, so straight runs along them can't be drawn as one segment */
   curved: boolean
   space: number
@@ -201,7 +205,7 @@ type Line = {
 }
 
 /** Steps: the line in pieces, each as wide as the average ink over it. */
-function stepLine({ centre, drift, shown, fadeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function stepLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
   const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
   const steps = Math.ceil(along / step)
@@ -210,7 +214,8 @@ function stepLine({ centre, drift, shown, fadeAt, curved, space, along, look, sh
   for (let j = 0; j < steps; j++) {
     const v = j * step + drift
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
-    const fade = fadeAt ? fadeAt((j + 0.5) * step) : 1
+    let fade = fadeAt ? fadeAt((j + 0.5) * step) : 1
+    if (cutAt) fade *= 1 - cutAt((j + 0.5) * step) * (1 - look.subject)
     widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown, fade)
     if (widths[j] > 0) any = true
   }
@@ -251,7 +256,7 @@ function stepLine({ centre, drift, shown, fadeAt, curved, space, along, look, sh
  * the first such point to the last, so each edge follows the image on its own: an edge of the
  * design can cut through a line, and lines taper to points as they thin out.
  */
-function screenLine({ centre, drift, shown, fadeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function screenLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // points across the line, an odd number so one sits on its middle
   const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
   const offsets = new Float32Array(across)
@@ -270,12 +275,14 @@ function screenLine({ centre, drift, shown, fadeAt, curved, space, along, look, 
     const v = Math.min(along, r * rowStep)
     const swell = swellAt(centre, v)
     const fade = fadeAt ? fadeAt(v) : 1
+    const removed = cutAt ? cutAt(v) : 0
     let first = -1
     let last = -1
     for (let k = 0; k < across; k++) {
       const ink = look.point(centre + offsets[k], v + drift)
       // how far inside the line this point is (negative: outside)
-      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown, fade) / 2 - Math.abs(offsets[k])
+      const kept = removed ? fade * (1 - removed * (1 - look.subject)) : fade
+      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown, kept) / 2 - Math.abs(offsets[k])
       if (room[k] >= 0) {
         if (first < 0) first = k
         last = k
@@ -350,6 +357,43 @@ function blobsAt(time: number, w: number, h: number) {
   })
 }
 
+/** A repeatable random number from 0 to 1 for the whole numbers `a`, `b` and `seed`. */
+function hash(a: number, b: number, seed: number) {
+  let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 2147483647)) | 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** Smooth random hills across a plane; nearby points get similar values. */
+function hills(x: number, y: number, seed: number) {
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const fx = smooth(x - ix)
+  const fy = smooth(y - iy)
+  const top = hash(ix, iy, seed) * (1 - fx) + hash(ix + 1, iy, seed) * fx
+  const bottom = hash(ix, iy + 1, seed) * (1 - fx) + hash(ix + 1, iy + 1, seed) * fx
+  return top * (1 - fy) + bottom * fy
+}
+
+/**
+ * Fragment: soft patches at random around the artboard. The further into a patch, the more of each
+ * line is cut away, into shorter and rarer pieces with their own random lengths on every line, until
+ * nothing is left. `amount` 1 clears everything. Returns how much of line `i` is cut at `v` (0 to 1);
+ * the lines stay put from frame to frame, and the caller spares the design.
+ */
+function fragments(amount: number, seed: number, frame: Frame, space: number, size: number) {
+  return (i: number, centre: number, v: number) => {
+    const x = frame.x(centre, v) / size
+    const y = frame.y(centre, v) / size
+    const patch = clamp((0.65 * hills(x * 3.5, y * 3.5, seed) + 0.35 * hills(x * 9, y * 9, seed + 1) - 0.25) / 0.5)
+    const depth = clamp((amount * 1.3 - patch) / 0.3)
+    if (!depth) return 0
+    const piece = space * (3 + 9 * hash(i, 0, seed + 2))
+    const along = 0.7 * hills(i, v / piece, seed + 3) + 0.3 * hills(i, (v * 3) / piece, seed + 4)
+    return 1 - smooth(clamp((clamp((along - 0.2) / 0.6) - depth) / 0.06))
+  }
+}
+
 /** Fall: each line's own start and pace, picked at random when the page opens. */
 const FALL_PATHS = Array.from({ length: 400 }, () => ({ start: Math.random(), pace: Math.random() }))
 
@@ -393,7 +437,7 @@ function reveal(time: number, at: number, amount: number) {
 /**
  * Reads the ink map at places on the canvas, given across and along the lines: `box` averages a
  * box, `point` blends the nearest map pixels. Both leave the glow's rim there in `rim`, the haze in
- * `haze` and the gap in `gap`. Outside the image counts as blank paper.
+ * `haze`, the gap in `gap` and the design's area in `subject`. Outside the image counts as blank paper.
  */
 function reader(map: InkMap, at: { x: number; y: number; w: number; h: number }, frame: Frame) {
   const sx = map.w / at.w
@@ -403,6 +447,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
     rim: 0,
     haze: 0,
     gap: 0,
+    subject: 0,
     box(u0: number, u1: number, v0: number, v1: number) {
       let x0 = u0
       let x1 = u1
@@ -437,11 +482,13 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       look.rim = 0
       look.haze = 0
       look.gap = 0
+      look.subject = 0
       if (a === b || c === d) return 0
       const total = (s: Float64Array) => (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
       if (map.rimSums) look.rim = total(map.rimSums)
       if (map.hazeSums) look.haze = total(map.hazeSums)
       if (map.gapSums) look.gap = total(map.gapSums)
+      if (map.subjectSums) look.subject = total(map.subjectSums)
       return total(map.inkSums)
     },
     point(u: number, v: number) {
@@ -454,6 +501,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       look.rim = map.rim ? blend(map.rim, x0, y0, fx, fy) : 0
       look.haze = map.haze ? blend(map.haze, x0, y0, fx, fy) : 0
       look.gap = map.gap ? blend(map.gap, x0, y0, fx, fy) : 0
+      look.subject = map.subject ? blend(map.subject, x0, y0, fx, fy) : 0
       return blend(map.ink, x0, y0, fx, fy)
     },
   }

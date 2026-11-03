@@ -32,6 +32,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
 - **Curve**: bends the lines (not the image) either way, −100 to 100. **Margins** keeps them
   straight through the middle and bends them towards their ends, **Even** bends them in one arc,
   **Middle** keeps the ends straight and bulges the middle.
+- **Fragment**: breaks lines into pieces and removes them in random patches around the artboard,
+  only where they're clear of the design. **Shuffle** moves the patches.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the

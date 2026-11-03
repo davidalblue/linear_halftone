@@ -36,6 +36,10 @@ const DEFAULTS = {
   // Curve bends the lines (not the image), either way; Curve From sets where along them the bend is
   curve: 0,
   curveFrom: 'middle' as CurveFrom,
+  // Fragment breaks up and removes lines in random patches, wherever they're clear of the design;
+  // a new seed moves the patches
+  fragment: 0,
+  fragmentSeed: 1,
   lines: 68,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -78,6 +82,8 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   levels: [0, 8],
   angle: [0, 360],
   curve: [-100, 100],
+  fragment: [0, 100],
+  fragmentSeed: [0, 1e9],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],
