@@ -146,9 +146,14 @@ export function inkMap(settings: MapSettings) {
   }
   let subject: Float32Array | null = null
   if (marked) {
-    // the design with a small margin, plus whatever Soften and Glow spread beyond its edges
+    // the design with a small margin, plus whatever Soften and Glow spread beyond its edges, ending
+    // cleanly so faint traces far from the design don't leave slivers of line
     const near = blur(raw.ink, w, h, Math.max(1, Math.round(0.004 * longest)))
-    subject = near.map((v, i) => Math.max(Math.min(1, v * 3), Math.min(1, ink[i] * 3), rim ? rim[i] : 0))
+    subject = near.map((v, i) => {
+      const reach = Math.max(v * 3, ink[i] * 3, rim ? rim[i] : 0)
+      const t = Math.min(1, Math.max(0, (reach - 0.1) / 0.4))
+      return t * t * (3 - 2 * t)
+    })
   }
   map = {
     w,
