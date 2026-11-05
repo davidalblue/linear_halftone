@@ -122,7 +122,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 })
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 || state.bloat > 0 })
   const haziness = state.haze / 100
   const start = (u: number, v: number) => pen.moveTo(frame.x(u, v), frame.y(u, v))
   const point = (u: number, v: number) => pen.lineTo(frame.x(u, v), frame.y(u, v))
@@ -168,6 +168,41 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   }
 
   const cut = state.fragment ? fragments(state.fragment / 100, state.fragmentSeed, frame, space, Math.min(w, h)) : null
+  const bloat = state.bloat / 100
+  // how often Bloat looks along a line for where the design starts and stops
+  const grain = Math.max(2, along / 1500)
+  /**
+   * Bloat for the line at `centre`: each stretch clear of the design swells towards its middle and
+   * tapers away at both ends, where it meets the design or leaves the canvas. Stretches shorter than
+   * 14 gaps between lines swell less, so small spaces like the holes in letters stay open. Returns how
+   * far each point along the line is pushed towards full weight, 0 to 1.
+   */
+  const bulges = (centre: number, drift: number) => {
+    const count = Math.ceil(along / grain) + 1
+    const clear = new Uint8Array(count)
+    for (let k = 0; k < count; k++) {
+      const v = k * grain
+      const x = frame.x(centre, v)
+      const y = frame.y(centre, v)
+      look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
+      clear[k] = x >= 0 && x <= w && y >= 0 && y <= h && look.subject < 0.15 ? 1 : 0
+    }
+    const push = new Float32Array(count)
+    for (let a = 0; a < count; a++) {
+      if (!clear[a]) continue
+      let b = a
+      while (b < count && clear[b]) b++
+      const size = Math.min(1, ((b - a) * grain) / (space * 14))
+      for (let k = a; k < b; k++) push[k] = bloat * size * Math.sin((Math.PI * (k - a + 0.5)) / (b - a)) ** 1.5
+      a = b
+    }
+    return (v: number) => {
+      const at = Math.min(count - 1, Math.max(0, v / grain))
+      const k = Math.min(count - 2, Math.floor(at))
+      return k < 0 ? push[0] : push[k] + (push[k + 1] - push[k]) * (at - k)
+    }
+  }
+
   const shape = state.style === 'screen' ? screenLine : stepLine
   for (let i = -extra; i < count + extra; i++) {
     const centre = (i + 0.5) * space
@@ -179,7 +214,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
     const cutAt = cut ? (v: number) => cut(i, centre, v) : null
-    shape({ centre, drift, shown, fadeAt, cutAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
+    const bulgeAt = bloat ? bulges(centre, drift) : null
+    shape({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
 
@@ -191,6 +227,8 @@ type Line = {
   fadeAt: ((v: number) => number) | null
   /** Fragment: how much of the line is cut away at `v` along it, wherever it's clear of the design */
   cutAt: ((v: number) => number) | null
+  /** Bloat: how far the line is pushed towards full weight at `v` along it */
+  bulgeAt: ((v: number) => number) | null
   /** whether the lines bend, so straight runs along them can't be drawn as one segment */
   curved: boolean
   space: number
@@ -205,7 +243,7 @@ type Line = {
 }
 
 /** Steps: the line in pieces, each as wide as the average ink over it. */
-function stepLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function stepLine({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // Detail 0 makes steps longer than the gap between lines; 100 makes them a tenth of it
   const step = Math.max(1, space * (1.6 - 1.5 * (state.detail / 100)))
   const steps = Math.ceil(along / step)
@@ -216,7 +254,9 @@ function stepLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, l
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
     let fade = fadeAt ? fadeAt((j + 0.5) * step) : 1
     if (cutAt) fade *= 1 - cutAt((j + 0.5) * step) * (1 - look.subject)
-    widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown, fade)
+    let t = shade(ink, look.rim, look.haze, look.gap)
+    if (bulgeAt) t += bulgeAt((j + 0.5) * step) * (1 - t)
+    widths[j] = width(t, swellAt(centre, j * step), shown, fade)
     if (widths[j] > 0) any = true
   }
   if (!any) return
@@ -256,7 +296,7 @@ function stepLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, l
  * the first such point to the last, so each edge follows the image on its own: an edge of the
  * design can cut through a line, and lines taper to points as they thin out.
  */
-function screenLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
+function screenLine({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved, space, along, look, shade, width, swellAt, start, point, pen }: Line) {
   // points across the line, an odd number so one sits on its middle
   const across = Math.max(5, Math.min(25, Math.ceil(space / 0.75))) | 1
   const offsets = new Float32Array(across)
@@ -276,13 +316,16 @@ function screenLine({ centre, drift, shown, fadeAt, cutAt, curved, space, along,
     const swell = swellAt(centre, v)
     const fade = fadeAt ? fadeAt(v) : 1
     const removed = cutAt ? cutAt(v) : 0
+    const bulge = bulgeAt ? bulgeAt(v) : 0
     let first = -1
     let last = -1
     for (let k = 0; k < across; k++) {
       const ink = look.point(centre + offsets[k], v + drift)
       // how far inside the line this point is (negative: outside)
       const kept = removed ? fade * (1 - removed * (1 - look.subject)) : fade
-      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown, kept) / 2 - Math.abs(offsets[k])
+      let t = shade(ink, look.rim, look.haze, look.gap)
+      if (bulge) t += bulge * (1 - t)
+      room[k] = width(t, swell, shown, kept) / 2 - Math.abs(offsets[k])
       if (room[k] >= 0) {
         if (first < 0) first = k
         last = k

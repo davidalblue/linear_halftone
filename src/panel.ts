@@ -111,6 +111,9 @@ export function initPanel(actions: Actions) {
   const shuffle = button($('#fragment-shuffle'), () => (state.fragmentSeed = Math.floor(Math.random() * 1e9)))
   addSync(() => ((shuffle as HTMLButtonElement).disabled = !state.fragment))
 
+  // Bloat: how much the lines clear of the design swell
+  $('#bloat-sliders').append(num('Bloat', 'bloat'))
+
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })
   const modes: { value: Mode; label: string }[] = [

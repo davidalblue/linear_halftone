@@ -40,6 +40,8 @@ const DEFAULTS = {
   // a new seed moves the patches
   fragment: 30,
   fragmentSeed: 1,
+  // Bloat swells the lines where they're clear of the design, tapering back to normal where they meet it
+  bloat: 0,
   lines: 64,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -84,6 +86,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   curve: [-100, 100],
   fragment: [0, 100],
   fragmentSeed: [0, 1e9],
+  bloat: [0, 100],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],
