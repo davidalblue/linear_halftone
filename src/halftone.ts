@@ -141,13 +141,15 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   }
   const look = reader(map, placement(w, h), frame)
   /** A line's width where the tone is `t`. */
-  const width = (t: number, swell: number, shown: number, fade = 1) => {
+  const width = (t: number, swell: number, shown: number, fade = 1, bulge = 0) => {
     // Wave and Blobs: heavier ink where they pass, mostly over the design so it stays legible
     if (swell) t = clamp(t + swell * (0.3 + 0.7 * t))
     t *= shown
     if (state.levels) t = Math.round(t * state.levels) / state.levels
-    // Fall's fade takes the whole line away, hairline too
-    return (thinnest + (widest - thinnest) * t) * fade
+    const base = thinnest + (widest - thinnest) * t
+    // Bloat comes after the Levels so bulges stay smooth instead of banding across neighbouring lines.
+    // Fall's and Fragment's fade takes the whole line away, hairline too.
+    return (base + (widest - base) * bulge) * fade
   }
   const blobs = state.mode === 'blobs' && amount ? blobsAt(time, w, h) : null
   /** How much Wave or Blobs thicken (or thin) the line at `centre` where it passes `v`. */
@@ -175,7 +177,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
    * Bloat for the line at `centre`: each stretch clear of the design swells towards its middle and
    * tapers away at both ends, where it meets the design or leaves the canvas. Stretches shorter than
    * 14 gaps between lines swell less, so small spaces like the holes in letters stay open. Returns how
-   * far each point along the line is pushed towards full weight, 0 to 1.
+   * far each point along the line is pushed towards full weight, at most 0.8 so slits remain and the
+   * lines still read as lines.
    */
   const bulges = (centre: number, drift: number) => {
     const count = Math.ceil(along / grain) + 1
@@ -193,7 +196,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
       let b = a
       while (b < count && clear[b]) b++
       const size = Math.min(1, ((b - a) * grain) / (space * 14))
-      for (let k = a; k < b; k++) push[k] = bloat * size * Math.sin((Math.PI * (k - a + 0.5)) / (b - a)) ** 1.5
+      for (let k = a; k < b; k++) push[k] = 0.8 * bloat * size * Math.sin((Math.PI * (k - a + 0.5)) / (b - a)) ** 1.5
       a = b
     }
     return (v: number) => {
@@ -227,7 +230,7 @@ type Line = {
   fadeAt: ((v: number) => number) | null
   /** Fragment: how much of the line is cut away at `v` along it, wherever it's clear of the design */
   cutAt: ((v: number) => number) | null
-  /** Bloat: how far the line is pushed towards full weight at `v` along it */
+  /** Bloat: how far the line is pushed towards full weight at `v` along it, before Gap's band */
   bulgeAt: ((v: number) => number) | null
   /** whether the lines bend, so straight runs along them can't be drawn as one segment */
   curved: boolean
@@ -235,7 +238,7 @@ type Line = {
   along: number
   look: ReturnType<typeof reader>
   shade(ink: number, rim: number, haze: number, gap: number): number
-  width(t: number, swell: number, shown: number, fade?: number): number
+  width(t: number, swell: number, shown: number, fade?: number, bulge?: number): number
   swellAt(centre: number, v: number): number
   start(u: number, v: number): void
   point(u: number, v: number): void
@@ -254,9 +257,9 @@ function stepLine({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved, space,
     const ink = look.box(centre - space / 2, centre + space / 2, v, v + step)
     let fade = fadeAt ? fadeAt((j + 0.5) * step) : 1
     if (cutAt) fade *= 1 - cutAt((j + 0.5) * step) * (1 - look.subject)
-    let t = shade(ink, look.rim, look.haze, look.gap)
-    if (bulgeAt) t += bulgeAt((j + 0.5) * step) * (1 - t)
-    widths[j] = width(t, swellAt(centre, j * step), shown, fade)
+    // Bloat stays out of Gap's clear band around the design
+    const bulge = bulgeAt ? bulgeAt((j + 0.5) * step) * (1 - look.gap) : 0
+    widths[j] = width(shade(ink, look.rim, look.haze, look.gap), swellAt(centre, j * step), shown, fade, bulge)
     if (widths[j] > 0) any = true
   }
   if (!any) return
@@ -323,9 +326,8 @@ function screenLine({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved, spac
       const ink = look.point(centre + offsets[k], v + drift)
       // how far inside the line this point is (negative: outside)
       const kept = removed ? fade * (1 - removed * (1 - look.subject)) : fade
-      let t = shade(ink, look.rim, look.haze, look.gap)
-      if (bulge) t += bulge * (1 - t)
-      room[k] = width(t, swell, shown, kept) / 2 - Math.abs(offsets[k])
+      // Bloat stays out of Gap's clear band around the design
+      room[k] = width(shade(ink, look.rim, look.haze, look.gap), swell, shown, kept, bulge * (1 - look.gap)) / 2 - Math.abs(offsets[k])
       if (room[k] >= 0) {
         if (first < 0) first = k
         last = k
