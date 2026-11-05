@@ -7,21 +7,21 @@ export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs' | 'fall'
 /** Everything the panel controls. Reset puts it back to these, except the canvas size. */
 const DEFAULTS = {
   // Canvas: Fit fills the stage; otherwise it's drawn and saved at exactly width × height
-  canvasFit: true,
-  canvasW: 1080,
-  canvasH: 1350,
+  canvasFit: false,
+  canvasW: 700,
+  canvasH: 1000,
   // Image: Tone reads dark areas as ink, Shape reads the opaque parts of a transparent PNG
   read: 'tone' as Read,
   invert: false,
-  scale: 137,
-  contrast: 86,
+  scale: 101,
+  contrast: 80,
   // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
-  brightness: 48,
+  brightness: 54,
   // Soften blurs the image first, so edges become ramps the lines taper along
   soften: 39,
   // Glow draws a rim of ink along every edge of the design, Glow Size wide
   glow: true,
-  glowSize: 5,
+  glowSize: 9,
   // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
   // whole composition
   haze: 0,
@@ -30,35 +30,35 @@ const DEFAULTS = {
   // Halftone: off shows the original image
   halftone: true,
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
-  style: 'steps' as Style,
+  style: 'screen' as Style,
   // Angle: the lines turn all the way round, upright at 0 and flat at 90; the image stays put
   angle: 0,
   // Curve bends the lines (not the image), either way; Curve From sets where along them the bend is
   curve: 0,
-  curveFrom: 'middle' as CurveFrom,
+  curveFrom: 'even' as CurveFrom,
   // Fragment breaks up and removes lines in random patches, wherever they're clear of the design;
   // a new seed moves the patches
-  fragment: 0,
+  fragment: 30,
   fragmentSeed: 1,
-  lines: 68,
+  lines: 64,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
-  hairline: 9,
+  hairline: 24,
   // how short the steps along each line are
   detail: 96,
   // how many line widths there are (0 = any width)
   levels: 8,
   // Screen only: how much each line's edges are smoothed, so its pinches and joins flow
-  liquid: 0,
+  liquid: 100,
   edges: 'square' as Edges,
   // Motion
   motion: false,
-  mode: 'blobs' as Mode,
+  mode: 'fall' as Mode,
   speed: 30,
   amount: 40,
   // Colour
-  lineColour: '#d6d6d6',
-  background: '#080f42',
+  lineColour: '#000000',
+  background: '#606060',
 }
 
 export type State = typeof DEFAULTS
