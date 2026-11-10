@@ -147,9 +147,12 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     t *= shown
     if (state.levels) t = Math.round(t * state.levels) / state.levels
     const base = thinnest + (widest - thinnest) * t
-    // Bloat comes after the Levels so bulges stay smooth instead of banding across neighbouring lines.
-    // Fall's and Fragment's fade takes the whole line away, hairline too.
-    return (base + (widest - base) * bulge) * fade
+    // Bloat comes after the Levels so its shapes stay smooth instead of banding across neighbouring
+    // lines. Swelling stops at 80% of the way to full weight, so slits remain and the lines still read
+    // as lines; puckering pinches the line down, all the way at −1.
+    const bloated = bulge >= 0 ? base + (widest - base) * 0.8 * bulge : base * (1 + bulge)
+    // Fall's and Fragment's fade takes the whole line away, hairline too
+    return bloated * fade
   }
   const blobs = state.mode === 'blobs' && amount ? blobsAt(time, w, h) : null
   /** How much Wave or Blobs thicken (or thin) the line at `centre` where it passes `v`. */
@@ -173,30 +176,41 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const bloat = state.bloat / 100
   // how often Bloat looks along a line for where the design starts and stops
   const grain = Math.max(2, along / 1500)
+  const reach = Math.min(w, h)
   /**
-   * Bloat for the line at `centre`: each stretch clear of the design swells towards its middle and
-   * tapers away at both ends, where it meets the design or leaves the canvas. Stretches shorter than
-   * 14 gaps between lines swell less, so small spaces like the holes in letters stay open. Returns how
-   * far each point along the line is pushed towards full weight, at most 0.8 so slits remain and the
-   * lines still read as lines.
+   * Bloat for the line at `centre`: along each stretch clear of the design, the line swells in some
+   * places and puckers (pinches thinner) in others, following soft random shapes laid over the whole
+   * canvas, so neighbouring lines swell and pinch together into forms. The shapes are sized by the
+   * canvas, not the gap between lines, so they hold up with any number of lines. Near the design and
+   * the canvas's edges each stretch eases back to its normal width, and stretches shorter than 14
+   * gaps between lines change less, so small spaces like the holes in letters stay open. Returns, for
+   * each point along the line, how far it's pushed: towards full weight (up to 1) or thinner (down to
+   * −1, a full pinch).
    */
   const bulges = (centre: number, drift: number) => {
     const count = Math.ceil(along / grain) + 1
     const clear = new Uint8Array(count)
+    const form = new Float32Array(count)
     for (let k = 0; k < count; k++) {
       const v = k * grain
       const x = frame.x(centre, v)
       const y = frame.y(centre, v)
       look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
       clear[k] = x >= 0 && x <= w && y >= 0 && y <= h && look.subject < 0.15 ? 1 : 0
+      // mostly swelling, with pinches: −1 to 1, leaning towards swelling
+      const hill = 0.65 * hills((x / reach) * 4, (y / reach) * 4, state.bloatSeed) + 0.35 * hills((x / reach) * 10, (y / reach) * 10, state.bloatSeed + 1)
+      form[k] = Math.max(-1, Math.min(1, 0.3 + 1.6 * (hill - 0.5)))
     }
+    // how far from a stretch's ends the line takes to ease into the shapes
+    const ease = (reach * 0.06) / grain
     const push = new Float32Array(count)
     for (let a = 0; a < count; a++) {
       if (!clear[a]) continue
       let b = a
       while (b < count && clear[b]) b++
       const size = Math.min(1, ((b - a) * grain) / (space * 14))
-      for (let k = a; k < b; k++) push[k] = 0.8 * bloat * size * Math.sin((Math.PI * (k - a + 0.5)) / (b - a)) ** 1.5
+      const easing = Math.min(ease, (b - a) / 2)
+      for (let k = a; k < b; k++) push[k] = bloat * size * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)) * form[k]
       a = b
     }
     return (v: number) => {
@@ -230,7 +244,7 @@ type Line = {
   fadeAt: ((v: number) => number) | null
   /** Fragment: how much of the line is cut away at `v` along it, wherever it's clear of the design */
   cutAt: ((v: number) => number) | null
-  /** Bloat: how far the line is pushed towards full weight at `v` along it, before Gap's band */
+  /** Bloat: how far the line swells (towards 1) or puckers (towards −1) at `v`, before Gap's band */
   bulgeAt: ((v: number) => number) | null
   /** whether the lines bend, so straight runs along them can't be drawn as one segment */
   curved: boolean

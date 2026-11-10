@@ -34,9 +34,9 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   **Middle** keeps the ends straight and bulges the middle.
 - **Fragment**: breaks lines into pieces and removes them in random patches around the artboard,
   only where they're clear of the design. **Shuffle** moves the patches.
-- **Bloat**: swells the lines where they're clear of the design, most at the middle of each clear
-  stretch, tapering back to normal where they meet the design or the canvas edge. Short stretches
-  swell less.
+- **Bloat**: where the lines are clear of the design, they swell in some places and pucker in
+  others, following soft random shapes across the canvas, easing back to normal near the design and
+  the canvas edge. Short stretches change less. **Shuffle** reshapes them.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the
