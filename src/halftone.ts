@@ -197,9 +197,9 @@ function trace(pen: Pen, w: number, h: number, time: number) {
       const y = frame.y(centre, v)
       look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
       clear[k] = x >= 0 && x <= w && y >= 0 && y <= h && look.subject < 0.15 ? 1 : 0
-      // mostly swelling, with pinches: −1 to 1, leaning towards swelling
+      // swelling and pinching, −1 to 1, leaning a little towards swelling
       const hill = 0.65 * hills((x / reach) * 4, (y / reach) * 4, state.bloatSeed) + 0.35 * hills((x / reach) * 10, (y / reach) * 10, state.bloatSeed + 1)
-      form[k] = Math.max(-1, Math.min(1, 0.3 + 1.6 * (hill - 0.5)))
+      form[k] = Math.max(-1, Math.min(1, 0.15 + 2.6 * (hill - 0.5)))
     }
     // how far from a stretch's ends the line takes to ease into the shapes
     const ease = (reach * 0.06) / grain
