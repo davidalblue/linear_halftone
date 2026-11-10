@@ -16,12 +16,12 @@ const DEFAULTS = {
   scale: 100,
   contrast: 80,
   // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
-  brightness: 54,
+  brightness: 85,
   // Soften blurs the image first, so edges become ramps the lines taper along
-  soften: 39,
+  soften: 13,
   // Glow draws a rim of ink along every edge of the design, Glow Size wide
   glow: true,
-  glowSize: 9,
+  glowSize: 10,
   // Haze darkens the paper near the design and leaves open space light, so the lines vary over the
   // whole composition
   haze: 0,
@@ -32,9 +32,9 @@ const DEFAULTS = {
   // Steps: pieces of one width each; Screen: each edge follows the image, like a printer's line screen
   style: 'screen' as Style,
   // Angle: the lines turn all the way round, upright at 0 and flat at 90; the image stays put
-  angle: 0,
+  angle: 105,
   // Curve bends the lines (not the image), either way; Curve From sets where along them the bend is
-  curve: 0,
+  curve: -83,
   curveFrom: 'even' as CurveFrom,
   // Fragment breaks up and removes lines in random patches, wherever they're clear of the design;
   // a new seed moves the patches
@@ -42,12 +42,12 @@ const DEFAULTS = {
   fragmentSeed: 1,
   // Bloat swells and puckers the lines where they're clear of the design, in random shapes across the
   // canvas, easing back to normal where they meet it; a new seed reshapes them
-  bloat: 0,
+  bloat: 88,
   bloatSeed: 1,
-  lines: 125,
+  lines: 123,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
-  hairline: 24,
+  hairline: 9,
   // how short the steps along each line are
   detail: 96,
   // how many line widths there are (0 = any width)
@@ -62,7 +62,7 @@ const DEFAULTS = {
   amount: 40,
   // Colour
   lineColour: '#000000',
-  background: '#606060',
+  background: '#ffffff',
 }
 
 export type State = typeof DEFAULTS
