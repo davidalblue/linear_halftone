@@ -41,6 +41,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the
   top down and draws it back in, like falling stars (Amount sets how randomly they fall).
+- **Presets**: each switches every setting, canvas size included, to a saved look. Preset 1 is the
+  starting look; Preset 2 is the earlier grey one with straight upright lines.
 - **Export**: PNG, SVG (one path per line) and video. **Copy Settings** copies every setting as text. Pick a canvas size first to export at that size.
 
 ## Files

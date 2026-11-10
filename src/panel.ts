@@ -1,5 +1,5 @@
 import { isCutOut, loadImage, picture } from './image'
-import { CANVAS_PRESETS, clock, randomize, RANGES, reset, state, type CurveFrom, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
+import { CANVAS_PRESETS, clock, isPreset, PRESETS, randomize, RANGES, reset, state, usePreset, type CurveFrom, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
 import { $, addSync, button, choice, colour, hint, numberField, onPanelChange, slider, syncPanel, toggle, type Bind } from './ui'
 
 /** Binds a slider to a number in the state, over its range. */
@@ -174,6 +174,15 @@ export function initPanel(actions: Actions) {
     } catch {
       hint("Couldn't copy to the clipboard", true)
     }
+  })
+
+  // Presets: each button switches every setting to a saved look, and is lit while nothing's changed
+  PRESETS.forEach((_, i) => {
+    const b = button($(`#preset-${i + 1}`), () => usePreset(i))
+    addSync(() => {
+      b.classList.toggle('is-active', isPreset(i))
+      b.setAttribute('aria-pressed', String(isPreset(i)))
+    })
   })
 
   syncPanel()

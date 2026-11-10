@@ -108,6 +108,34 @@ export const CANVAS_PRESETS: Record<string, [number, number]> = {
   '16:9': [1920, 1080],
 }
 
+/**
+ * Saved looks: every setting at once, canvas size included. Preset 1 is the starting look; Preset 2
+ * is the one before it (grey background, straight upright lines, no Bloat).
+ */
+export const PRESETS: State[] = [
+  { ...DEFAULTS },
+  {
+    ...DEFAULTS,
+    brightness: 54,
+    soften: 39,
+    glowSize: 9,
+    angle: 0,
+    curve: 0,
+    bloat: 0,
+    lines: 125,
+    hairline: 24,
+    background: '#606060',
+  },
+]
+
+/** Switches every setting to preset `i`. */
+export function usePreset(i: number) {
+  Object.assign(state, PRESETS[i])
+}
+
+/** Whether every setting matches preset `i`. */
+export const isPreset = (i: number) => (Object.keys(PRESETS[i]) as (keyof State)[]).every((key) => state[key] === PRESETS[i][key])
+
 /** Puts the controls back, keeping the canvas size and how the image is read. */
 export function reset() {
   const { canvasFit, canvasW, canvasH, read } = state
