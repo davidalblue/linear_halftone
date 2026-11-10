@@ -110,7 +110,8 @@ export const CANVAS_PRESETS: Record<string, [number, number]> = {
 
 /**
  * Saved looks: every setting at once, canvas size included. Preset 1 is the starting look; Preset 2
- * is the one before it (grey background, straight upright lines, no Bloat).
+ * is the one before it (grey background, straight upright lines, no Bloat); Preset 3 is pink lines
+ * on deep teal, curving the other way, with more Fragment.
  */
 export const PRESETS: State[] = [
   { ...DEFAULTS },
@@ -125,6 +126,13 @@ export const PRESETS: State[] = [
     lines: 125,
     hairline: 24,
     background: '#606060',
+  },
+  {
+    ...DEFAULTS,
+    curve: 34,
+    fragment: 40,
+    lineColour: '#ffdad8',
+    background: '#123544',
   },
 ]
 
