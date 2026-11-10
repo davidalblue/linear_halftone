@@ -13,7 +13,7 @@ const DEFAULTS = {
   // Image: Tone reads dark areas as ink, Shape reads the opaque parts of a transparent PNG
   read: 'tone' as Read,
   invert: false,
-  scale: 101,
+  scale: 100,
   contrast: 80,
   // below 50 adds ink everywhere, above takes it away, so blank paper can be a mid tone
   brightness: 54,
@@ -42,7 +42,7 @@ const DEFAULTS = {
   fragmentSeed: 1,
   // Bloat swells the lines where they're clear of the design, tapering back to normal where they meet it
   bloat: 0,
-  lines: 64,
+  lines: 125,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
   hairline: 24,
