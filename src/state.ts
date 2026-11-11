@@ -2,6 +2,8 @@ export type Read = 'tone' | 'shape'
 export type Style = 'steps' | 'screen'
 export type Edges = 'square' | 'sloped'
 export type CurveFrom = 'margins' | 'even' | 'middle'
+export type InsideShapes = 'small' | 'large' | 'both'
+export type InsideEdges = 'eased' | 'full'
 export type Mode = 'wave' | 'drift' | 'reveal' | 'blobs' | 'fall'
 
 /** Everything the panel controls. Reset puts it back to these, except the canvas size. */
@@ -44,8 +46,11 @@ const DEFAULTS = {
   // canvas, easing back to normal where they meet it; a new seed reshapes them
   bloat: 88,
   bloatSeed: 1,
-  // Inside swells and puckers the lines on the design itself, edge to edge, in smaller shapes
+  // Inside swells and puckers the lines on the design itself, edge to edge: in Small (stroke-sized),
+  // Large (Bloat-sized) or Both kinds of shapes, easing back at the outline or at Full strength there
   inside: 0,
+  insideShapes: 'small' as InsideShapes,
+  insideEdges: 'eased' as InsideEdges,
   lines: 123,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,

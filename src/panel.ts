@@ -1,5 +1,5 @@
 import { isCutOut, loadImage, picture } from './image'
-import { CANVAS_PRESETS, clock, isPreset, PRESETS, randomize, RANGES, reset, state, usePreset, type CurveFrom, type Edges, type Mode, type NumberKey, type Read, type Style } from './state'
+import { CANVAS_PRESETS, clock, isPreset, PRESETS, randomize, RANGES, reset, state, usePreset, type CurveFrom, type Edges, type InsideEdges, type InsideShapes, type Mode, type NumberKey, type Read, type Style } from './state'
 import { $, addSync, button, choice, colour, hint, numberField, onPanelChange, slider, syncPanel, toggle, type Bind } from './ui'
 
 /** Binds a slider to a number in the state, over its range. */
@@ -115,6 +115,21 @@ export function initPanel(actions: Actions) {
   $('#bloat-sliders').append(num('Bloat', 'bloat'), num('Inside', 'inside'))
   const reshape = button($('#bloat-shuffle'), () => (state.bloatSeed = Math.floor(Math.random() * 1e9)))
   addSync(() => ((reshape as HTMLButtonElement).disabled = !state.bloat && !state.inside))
+  // Inside's shapes and edges, greyed out while Inside is 0
+  const insideShapes: { value: InsideShapes; label: string }[] = [
+    { value: 'small', label: 'Small' },
+    { value: 'large', label: 'Large' },
+    { value: 'both', label: 'Both' },
+  ]
+  choice($('#inside-shapes'), insideShapes, { get: () => state.insideShapes, set: (v) => (state.insideShapes = v) })
+  const insideEdges: { value: InsideEdges; label: string }[] = [
+    { value: 'eased', label: 'Eased Edges' },
+    { value: 'full', label: 'Full Edges' },
+  ]
+  choice($('#inside-edges'), insideEdges, { get: () => state.insideEdges, set: (v) => (state.insideEdges = v) })
+  addSync(() =>
+    document.querySelectorAll<HTMLButtonElement>('#inside-shapes button, #inside-edges button').forEach((b) => (b.disabled = !state.inside)),
+  )
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })

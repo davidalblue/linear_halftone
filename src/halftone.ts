@@ -189,9 +189,10 @@ function trace(pen: Pen, w: number, h: number, time: number) {
    * each point along the line, how far it's pushed: towards full weight (up to 1, or 1.25 inside the
    * design) or thinner (down to −1, a full pinch).
    *
-   * Inside does the same along each stretch on the design, from edge to edge, with smaller shapes of
-   * its own, sized more like letter strokes. It eases back to normal in a thin band at the design's
-   * edge, so outlines and the Glow rim stay crisp.
+   * Inside does the same along each stretch on the design, from edge to edge, with shapes of its own:
+   * Small ones sized like letter strokes, Large ones as big as Bloat's, or Both layered (big waves with
+   * small ripples on top). Eased edges go back to normal in a thin band at the design's outline, so
+   * outlines and the Glow rim stay crisp; Full edges keep the effect right up to it.
    */
   const bulges = (centre: number, drift: number) => {
     const count = Math.ceil(along / grain) + 1
@@ -211,9 +212,11 @@ function trace(pen: Pen, w: number, h: number, time: number) {
       form[k] = Math.max(-1, Math.min(1, 0.15 + 2.6 * (hill - 0.5)))
       if (inside) {
         within[k] = onCanvas && ink > 0.5 ? 1 : 0
-        // smaller shapes for inside the design, swelling and pinching evenly
-        const fine = 0.65 * hills((x / reach) * 16, (y / reach) * 16, state.bloatSeed + 5) + 0.35 * hills((x / reach) * 36, (y / reach) * 36, state.bloatSeed + 6)
-        inner[k] = Math.max(-1, Math.min(1, 2.6 * (fine - 0.5)))
+        // shapes for inside the design, swelling and pinching evenly
+        const small = () => 0.65 * hills((x / reach) * 16, (y / reach) * 16, state.bloatSeed + 5) + 0.35 * hills((x / reach) * 36, (y / reach) * 36, state.bloatSeed + 6)
+        const large = () => 0.65 * hills((x / reach) * 4, (y / reach) * 4, state.bloatSeed + 7) + 0.35 * hills((x / reach) * 10, (y / reach) * 10, state.bloatSeed + 8)
+        const hill = state.insideShapes === 'small' ? small() : state.insideShapes === 'large' ? large() : 0.6 * large() + 0.4 * small()
+        inner[k] = Math.max(-1, Math.min(1, 2.6 * (hill - 0.5)))
       }
     }
     // how far from a stretch's ends the line takes to ease into the shapes
@@ -230,13 +233,13 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     }
     if (inside) {
       // the thin band at the design's edge where Inside eases back to normal
-      const band = Math.max(space * 1.2, reach * 0.012) / grain
+      const band = state.insideEdges === 'eased' ? Math.max(space * 1.2, reach * 0.012) / grain : 0
       for (let a = 0; a < count; a++) {
         if (!within[a]) continue
         let b = a
         while (b < count && within[b]) b++
         const easing = Math.min(band, (b - a) / 2)
-        for (let k = a; k < b; k++) push[k] = 1.25 * inside * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)) * inner[k]
+        for (let k = a; k < b; k++) push[k] = 1.25 * inside * (easing ? smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)) : 1) * inner[k]
         a = b
       }
     }
