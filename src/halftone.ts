@@ -148,9 +148,10 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     if (state.levels) t = Math.round(t * state.levels) / state.levels
     const base = thinnest + (widest - thinnest) * t
     // Bloat comes after the Levels so its shapes stay smooth instead of banding across neighbouring
-    // lines. Swelling stops at 80% of the way to full weight, so slits remain and the lines still read
-    // as lines; puckering pinches the line down, all the way at −1.
-    const bloated = bulge >= 0 ? base + (widest - base) * 0.8 * bulge : base * (1 + bulge)
+    // lines. Outside the design swelling stops at 80% of the way to full weight (a push of 1), so slits
+    // remain and the lines still read as lines; Inside pushes up to 1.25, which is full weight.
+    // Puckering pinches the line down, all the way at −1.
+    const bloated = bulge >= 0 ? Math.min(widest, base + (widest - base) * 0.8 * bulge) : base * (1 + bulge)
     // Fall's and Fragment's fade takes the whole line away, hairline too
     return bloated * fade
   }
@@ -174,6 +175,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
 
   const cut = state.fragment ? fragments(state.fragment / 100, state.fragmentSeed, frame, space, Math.min(w, h)) : null
   const bloat = state.bloat / 100
+  const inside = state.inside / 100
   // how often Bloat looks along a line for where the design starts and stops
   const grain = Math.max(2, along / 1500)
   const reach = Math.min(w, h)
@@ -184,22 +186,35 @@ function trace(pen: Pen, w: number, h: number, time: number) {
    * canvas, not the gap between lines, so they hold up with any number of lines. Near the design and
    * the canvas's edges each stretch eases back to its normal width, and stretches shorter than 14
    * gaps between lines change less, so small spaces like the holes in letters stay open. Returns, for
-   * each point along the line, how far it's pushed: towards full weight (up to 1) or thinner (down to
-   * −1, a full pinch).
+   * each point along the line, how far it's pushed: towards full weight (up to 1, or 1.25 inside the
+   * design) or thinner (down to −1, a full pinch).
+   *
+   * Inside does the same along each stretch on the design, from edge to edge, with smaller shapes of
+   * its own, sized more like letter strokes. It eases back to normal in a thin band at the design's
+   * edge, so outlines and the Glow rim stay crisp.
    */
   const bulges = (centre: number, drift: number) => {
     const count = Math.ceil(along / grain) + 1
     const clear = new Uint8Array(count)
     const form = new Float32Array(count)
+    const within = new Uint8Array(count)
+    const inner = new Float32Array(count)
     for (let k = 0; k < count; k++) {
       const v = k * grain
       const x = frame.x(centre, v)
       const y = frame.y(centre, v)
-      look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
-      clear[k] = x >= 0 && x <= w && y >= 0 && y <= h && look.subject < 0.15 ? 1 : 0
+      const ink = look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
+      const onCanvas = x >= 0 && x <= w && y >= 0 && y <= h
+      clear[k] = onCanvas && look.subject < 0.15 ? 1 : 0
       // swelling and pinching, −1 to 1, leaning a little towards swelling
       const hill = 0.65 * hills((x / reach) * 4, (y / reach) * 4, state.bloatSeed) + 0.35 * hills((x / reach) * 10, (y / reach) * 10, state.bloatSeed + 1)
       form[k] = Math.max(-1, Math.min(1, 0.15 + 2.6 * (hill - 0.5)))
+      if (inside) {
+        within[k] = onCanvas && ink > 0.5 ? 1 : 0
+        // smaller shapes for inside the design, swelling and pinching evenly
+        const fine = 0.65 * hills((x / reach) * 16, (y / reach) * 16, state.bloatSeed + 5) + 0.35 * hills((x / reach) * 36, (y / reach) * 36, state.bloatSeed + 6)
+        inner[k] = Math.max(-1, Math.min(1, 2.6 * (fine - 0.5)))
+      }
     }
     // how far from a stretch's ends the line takes to ease into the shapes
     const ease = (reach * 0.06) / grain
@@ -212,6 +227,18 @@ function trace(pen: Pen, w: number, h: number, time: number) {
       const easing = Math.min(ease, (b - a) / 2)
       for (let k = a; k < b; k++) push[k] = bloat * size * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)) * form[k]
       a = b
+    }
+    if (inside) {
+      // the thin band at the design's edge where Inside eases back to normal
+      const band = Math.max(space * 1.2, reach * 0.012) / grain
+      for (let a = 0; a < count; a++) {
+        if (!within[a]) continue
+        let b = a
+        while (b < count && within[b]) b++
+        const easing = Math.min(band, (b - a) / 2)
+        for (let k = a; k < b; k++) push[k] = 1.25 * inside * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)) * inner[k]
+        a = b
+      }
     }
     return (v: number) => {
       const at = Math.min(count - 1, Math.max(0, v / grain))
@@ -231,7 +258,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
     const cutAt = cut ? (v: number) => cut(i, centre, v) : null
-    const bulgeAt = bloat ? bulges(centre, drift) : null
+    const bulgeAt = bloat || inside ? bulges(centre, drift) : null
     shape({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }

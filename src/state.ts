@@ -44,6 +44,8 @@ const DEFAULTS = {
   // canvas, easing back to normal where they meet it; a new seed reshapes them
   bloat: 88,
   bloatSeed: 1,
+  // Inside swells and puckers the lines on the design itself, edge to edge, in smaller shapes
+  inside: 0,
   lines: 123,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -90,6 +92,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   fragmentSeed: [0, 1e9],
   bloat: [0, 100],
   bloatSeed: [0, 1e9],
+  inside: [0, 100],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],

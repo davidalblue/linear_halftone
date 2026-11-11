@@ -36,7 +36,8 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   only where they're clear of the design. **Shuffle** moves the patches.
 - **Bloat**: where the lines are clear of the design, they swell in some places and pucker in
   others, following soft random shapes across the canvas, easing back to normal near the design and
-  the canvas edge. Short stretches change less. **Shuffle** reshapes them.
+  the canvas edge. Short stretches change less. **Inside** does the same on the design itself, edge
+  to edge, in smaller shapes, easing back to normal right at its outline. **Shuffle** reshapes both.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the

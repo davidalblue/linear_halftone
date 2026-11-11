@@ -111,10 +111,10 @@ export function initPanel(actions: Actions) {
   const shuffle = button($('#fragment-shuffle'), () => (state.fragmentSeed = Math.floor(Math.random() * 1e9)))
   addSync(() => ((shuffle as HTMLButtonElement).disabled = !state.fragment))
 
-  // Bloat: how much the lines clear of the design swell and pucker, and Shuffle to reshape them
-  $('#bloat-sliders').append(num('Bloat', 'bloat'))
+  // Bloat: how much the lines swell and pucker clear of the design and on it, and Shuffle to reshape both
+  $('#bloat-sliders').append(num('Bloat', 'bloat'), num('Inside', 'inside'))
   const reshape = button($('#bloat-shuffle'), () => (state.bloatSeed = Math.floor(Math.random() * 1e9)))
-  addSync(() => ((reshape as HTMLButtonElement).disabled = !state.bloat))
+  addSync(() => ((reshape as HTMLButtonElement).disabled = !state.bloat && !state.inside))
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })
