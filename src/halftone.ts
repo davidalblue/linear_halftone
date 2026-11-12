@@ -122,7 +122,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 || state.bloat > 0, beads: state.beads ? state.beadCut : 0 })
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 || state.bloat > 0 || state.beadsOut > 0, beads: state.beads ? state.beadCut : 0 })
   const haziness = state.haze / 100
   const start = (u: number, v: number) => pen.moveTo(frame.x(u, v), frame.y(u, v))
   const point = (u: number, v: number) => pen.lineTo(frame.x(u, v), frame.y(u, v))
@@ -177,6 +177,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const bloat = state.bloat / 100
   const inside = state.inside / 100
   const beads = state.beads / 100
+  const beadsOut = state.beadsOut / 100
   // how often Bloat looks along a line for where the design starts and stops
   const grain = Math.max(2, along / 1500)
   const reach = Math.min(w, h)
@@ -248,12 +249,23 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     }
     // Beads: where the design is thick, the line swells into beads and pinches between them, in rows
     // that line up across neighbouring lines. Each bead is about 2.6 gaps between lines long.
-    if (beads) {
-      const period = space * 2.6
-      for (let k = 0; k < count; k++) {
-        if (!beadable[k]) continue
-        const wave = Math.cos((Math.PI * 2 * k * grain) / period)
-        push[k] = Math.max(-1, Math.min(1.25, push[k] + beads * beadable[k] * (wave > 0 ? 1.25 * wave : 0.95 * wave)))
+    // Background does the same on the lines clear of the design, in the same rows, easing off near the
+    // design and the canvas's edges; lettering thinner than the Cut-off is never touched.
+    const period = space * 2.6
+    const bead = (k: number, strength: number) => {
+      const wave = Math.cos((Math.PI * 2 * k * grain) / period)
+      push[k] = Math.max(-1, Math.min(1.25, push[k] + strength * (wave > 0 ? 1.25 * wave : 0.95 * wave)))
+    }
+    if (beads) for (let k = 0; k < count; k++) if (beadable[k]) bead(k, beads * beadable[k])
+    if (beadsOut) {
+      const band = Math.max(space * 1.2, reach * 0.012) / grain
+      for (let a = 0; a < count; a++) {
+        if (!clear[a]) continue
+        let b = a
+        while (b < count && clear[b]) b++
+        const easing = Math.min(band, (b - a) / 2)
+        for (let k = a; k < b; k++) bead(k, beadsOut * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)))
+        a = b
       }
     }
     return (v: number) => {
@@ -274,7 +286,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
     const cutAt = cut ? (v: number) => cut(i, centre, v) : null
-    const bulgeAt = bloat || inside || beads ? bulges(centre, drift) : null
+    const bulgeAt = bloat || inside || beads || beadsOut ? bulges(centre, drift) : null
     shape({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }

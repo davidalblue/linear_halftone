@@ -130,8 +130,8 @@ export function initPanel(actions: Actions) {
   addSync(() =>
     document.querySelectorAll<HTMLButtonElement>('#inside-shapes button, #inside-edges button').forEach((b) => (b.disabled = !state.inside)),
   )
-  // Beads, and the Cut-off: how thick the design must be before it beads
-  $('#beads-sliders').append(num('Beads', 'beads'), num('Cut-off', 'beadCut', () => state.beads > 0))
+  // Beads, and the Cut-off: how thick the design must be before it beads; Background beads the rest
+  $('#beads-sliders').append(num('Beads', 'beads'), num('Cut-off', 'beadCut', () => state.beads > 0), num('Background', 'beadsOut'))
 
   // Motion
   toggle($('#motion-switch'), { get: () => state.motion, set: (v) => (state.motion = v) })

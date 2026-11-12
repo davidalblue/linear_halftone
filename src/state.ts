@@ -55,6 +55,8 @@ const DEFAULTS = {
   // lettering beads and small lettering stays as it is
   beads: 0,
   beadCut: 30,
+  // Background beads the lines clear of the design in the same rows
+  beadsOut: 0,
   lines: 123,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -104,6 +106,7 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   inside: [0, 100],
   beads: [0, 100],
   beadCut: [1, 100],
+  beadsOut: [0, 100],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],
