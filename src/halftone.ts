@@ -252,11 +252,12 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     // Background does the same on the lines clear of the design, in the same rows, easing off near the
     // design and the canvas's edges; lettering thinner than the Cut-off is never touched.
     const period = space * 2.6
-    const bead = (k: number, strength: number) => {
+    // `swell` is how far beads grow: 1.25 is full weight, 1 stops at 80% like Bloat outside the design
+    const bead = (k: number, strength: number, swell: number) => {
       const wave = Math.cos((Math.PI * 2 * k * grain) / period)
-      push[k] = Math.max(-1, Math.min(1.25, push[k] + strength * (wave > 0 ? 1.25 * wave : 0.95 * wave)))
+      push[k] = Math.max(-1, Math.min(1.25, push[k] + strength * (wave > 0 ? swell * wave : 0.95 * wave)))
     }
-    if (beads) for (let k = 0; k < count; k++) if (beadable[k]) bead(k, beads * beadable[k])
+    if (beads) for (let k = 0; k < count; k++) if (beadable[k]) bead(k, beads * beadable[k], 1.25)
     if (beadsOut) {
       const band = Math.max(space * 1.2, reach * 0.012) / grain
       for (let a = 0; a < count; a++) {
@@ -264,7 +265,8 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         let b = a
         while (b < count && clear[b]) b++
         const easing = Math.min(band, (b - a) / 2)
-        for (let k = a; k < b; k++) bead(k, beadsOut * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)))
+        // background beads stop short of full weight, so the design stays the heaviest thing
+        for (let k = a; k < b; k++) bead(k, beadsOut * smooth(clamp(Math.min(k - a + 0.5, b - k - 0.5) / easing)), 1)
         a = b
       }
     }
