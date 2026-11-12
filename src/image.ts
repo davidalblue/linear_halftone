@@ -63,15 +63,17 @@ function pixels() {
  * How the map is made. Soften blurs the ink; Glow (0 = off) draws a rim along every edge of the
  * shapes, as wide as its value; Haze spreads a wide shadow of the design over the paper around it;
  * Gap (0 = off) clears a band around the design, as wide as its value; Subject marks where the
- * design is, for Fragment to leave alone.
+ * design is, for Fragment to leave alone; Beads (0 = off) marks the parts of the design thicker than
+ * its value, the Cut-off, where Beads can bead the lines.
  */
-export type MapSettings = { read: Read; soften: number; glow: number; haze: boolean; gap: number; subject: boolean }
+export type MapSettings = { read: Read; soften: number; glow: number; haze: boolean; gap: number; subject: boolean; beads: number }
 
 /**
  * The ink, 0 to 1, of each map pixel (`ink`), of the glow's rim (`rim`, or null without Glow) and
  * of the haze (`haze`, or null without it), of the gap's band (`gap`, or null without it) and of the
- * design's own area (`subject`, or null when Fragment is off), each with a summed-area table so any
- * box of the map can be averaged at once.
+ * design's own area (`subject`, or null when Fragment is off) and of where it's thick enough to bead
+ * (`bead`, or null when Beads is off), each with a summed-area table so any box of the map can be
+ * averaged at once.
  */
 export type InkMap = {
   w: number
@@ -86,6 +88,8 @@ export type InkMap = {
   gapSums: Float64Array | null
   subject: Float32Array | null
   subjectSums: Float64Array | null
+  bead: Float32Array | null
+  beadSums: Float64Array | null
 }
 
 let raw = { source: null as HTMLCanvasElement | null, read: '' as Read | '', w: 0, h: 0, ink: new Float32Array(0) }
@@ -94,8 +98,8 @@ let mapKey = ''
 
 /** The ink map for these settings; rebuilt only when they or the image change. */
 export function inkMap(settings: MapSettings) {
-  const { read, soften, glow, haze: hazy, gap: gapSize, subject: marked } = settings
-  const key = `${read} ${soften} ${glow} ${hazy} ${gapSize} ${marked}`
+  const { read, soften, glow, haze: hazy, gap: gapSize, subject: marked, beads: cutOff } = settings
+  const key = `${read} ${soften} ${glow} ${hazy} ${gapSize} ${marked} ${cutOff}`
   if (map && raw.source === picture.source && mapKey === key) return map
 
   // Tone is how dark each pixel is over white paper, Shape is how opaque
@@ -155,6 +159,18 @@ export function inkMap(settings: MapSettings) {
       return t * t * (3 - 2 * t)
     })
   }
+  let bead: Float32Array | null = null
+  if (cutOff) {
+    // How deep inside the design each point is, which is half the thickness of the stroke at its
+    // middle. Only points deeper than the Cut-off can bead, so thin strokes (small lettering) never
+    // do, and in thick ones beading fades in from the edges. Cut-off 100 is 4% of the shorter side.
+    const deep = depth(raw.ink, w, h)
+    const cut = Math.max(1, (cutOff / 100) * 0.04 * Math.min(w, h))
+    bead = deep.map((d) => {
+      const t = Math.min(1, Math.max(0, (d - cut) / (cut * 0.75)))
+      return t * t * (3 - 2 * t)
+    })
+  }
   map = {
     w,
     h,
@@ -168,9 +184,37 @@ export function inkMap(settings: MapSettings) {
     gapSums: gap && sums(gap, w, h),
     subject,
     subjectSums: subject && sums(subject, w, h),
+    bead,
+    beadSums: bead && sums(bead, w, h),
   }
   mapKey = key
   return map
+}
+
+/**
+ * For each pixel of the design (ink over half), roughly how many pixels it is from the nearest
+ * pixel outside it, the edge of the image included; 0 outside the design. Two sweeps of the
+ * neighbours' distances, straight steps 1 and diagonal ones 1.4.
+ */
+function depth(ink: Float32Array, w: number, h: number) {
+  const d = new Float32Array(w * h)
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : d[y * w + x])
+  for (let i = 0; i < d.length; i++) d[i] = ink[i] > 0.5 ? Infinity : 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      if (!d[i]) continue
+      d[i] = Math.min(d[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1.4, at(x + 1, y - 1) + 1.4)
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x
+      if (!d[i]) continue
+      d[i] = Math.min(d[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1.4, at(x - 1, y + 1) + 1.4)
+    }
+  }
+  return d
 }
 
 /** A summed-area table: entry (x, y) of the (w+1)-wide table is the total above and left of (x, y). */

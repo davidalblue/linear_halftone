@@ -51,6 +51,10 @@ const DEFAULTS = {
   inside: 0,
   insideShapes: 'small' as InsideShapes,
   insideEdges: 'eased' as InsideEdges,
+  // Beads breaks the lines into rows of beads where the design is thicker than the Cut-off, so big
+  // lettering beads and small lettering stays as it is
+  beads: 0,
+  beadCut: 30,
   lines: 123,
   // the thickest line, and the thinnest, as a share of the space between lines
   weight: 100,
@@ -98,6 +102,8 @@ export const RANGES: Record<NumberKey, [number, number]> = {
   bloat: [0, 100],
   bloatSeed: [0, 1e9],
   inside: [0, 100],
+  beads: [0, 100],
+  beadCut: [1, 100],
   liquid: [0, 100],
   speed: [0, 100],
   amount: [0, 100],

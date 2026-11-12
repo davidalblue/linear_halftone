@@ -38,7 +38,9 @@ Every push to `main` deploys to GitHub Pages (set **Settings → Pages → Sourc
   others, following soft random shapes across the canvas, easing back to normal near the design and
   the canvas edge. Short stretches change less. **Inside** does the same on the design itself, edge
   to edge, in **Small** (stroke-sized), **Large** (Bloat-sized) or **Both** kinds of shapes, with
-  **Eased Edges** (back to normal at the outline) or **Full Edges** (right up to it). **Shuffle** reshapes both.
+  **Eased Edges** (back to normal at the outline) or **Full Edges** (right up to it). **Beads** breaks
+  the lines into rows of beads where the design is thicker than the **Cut-off**, so big lettering
+  beads and small lettering stays as it is. **Shuffle** reshapes both.
 - **Motion**: **Wave** sweeps a band of heavier ink across, **Drift** slides each line's image up and
   down, **Reveal** fills the lines in one after another and empties them again, **Blobs** swells the
   lines under soft patches that wander the canvas at random, **Fall** wipes each line away from the

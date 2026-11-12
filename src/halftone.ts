@@ -122,7 +122,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const contrast = 2 ** ((state.contrast - 50) / 20)
   const brightness = (50 - state.brightness) / 50
   const amount = state.motion ? state.amount / 100 : 0
-  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 || state.bloat > 0 })
+  const map = inkMap({ read: state.read, soften: state.soften, glow: state.glow ? state.glowSize : 0, haze: state.haze > 0, gap: state.gap, subject: state.fragment > 0 || state.bloat > 0, beads: state.beads ? state.beadCut : 0 })
   const haziness = state.haze / 100
   const start = (u: number, v: number) => pen.moveTo(frame.x(u, v), frame.y(u, v))
   const point = (u: number, v: number) => pen.lineTo(frame.x(u, v), frame.y(u, v))
@@ -176,6 +176,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
   const cut = state.fragment ? fragments(state.fragment / 100, state.fragmentSeed, frame, space, Math.min(w, h)) : null
   const bloat = state.bloat / 100
   const inside = state.inside / 100
+  const beads = state.beads / 100
   // how often Bloat looks along a line for where the design starts and stops
   const grain = Math.max(2, along / 1500)
   const reach = Math.min(w, h)
@@ -200,12 +201,14 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     const form = new Float32Array(count)
     const within = new Uint8Array(count)
     const inner = new Float32Array(count)
+    const beadable = new Float32Array(count)
     for (let k = 0; k < count; k++) {
       const v = k * grain
       const x = frame.x(centre, v)
       const y = frame.y(centre, v)
       const ink = look.box(centre - space / 2, centre + space / 2, v + drift - grain / 2, v + drift + grain / 2)
       const onCanvas = x >= 0 && x <= w && y >= 0 && y <= h
+      if (beads && onCanvas) beadable[k] = look.bead
       clear[k] = onCanvas && look.subject < 0.15 ? 1 : 0
       // swelling and pinching, −1 to 1, leaning a little towards swelling
       const hill = 0.65 * hills((x / reach) * 4, (y / reach) * 4, state.bloatSeed) + 0.35 * hills((x / reach) * 10, (y / reach) * 10, state.bloatSeed + 1)
@@ -243,6 +246,16 @@ function trace(pen: Pen, w: number, h: number, time: number) {
         a = b
       }
     }
+    // Beads: where the design is thick, the line swells into beads and pinches between them, in rows
+    // that line up across neighbouring lines. Each bead is about 2.6 gaps between lines long.
+    if (beads) {
+      const period = space * 2.6
+      for (let k = 0; k < count; k++) {
+        if (!beadable[k]) continue
+        const wave = Math.cos((Math.PI * 2 * k * grain) / period)
+        push[k] = Math.max(-1, Math.min(1.25, push[k] + beads * beadable[k] * (wave > 0 ? 1.25 * wave : 0.95 * wave)))
+      }
+    }
     return (v: number) => {
       const at = Math.min(count - 1, Math.max(0, v / grain))
       const k = Math.min(count - 2, Math.floor(at))
@@ -261,7 +274,7 @@ function trace(pen: Pen, w: number, h: number, time: number) {
     const shown = state.mode === 'reveal' && state.motion ? reveal(time, count > 1 ? clamp(i / (count - 1)) : 0, amount) : 1
     const fadeAt = state.mode === 'fall' && state.motion ? fall(time, i, along, amount) : null
     const cutAt = cut ? (v: number) => cut(i, centre, v) : null
-    const bulgeAt = bloat || inside ? bulges(centre, drift) : null
+    const bulgeAt = bloat || inside || beads ? bulges(centre, drift) : null
     shape({ centre, drift, shown, fadeAt, cutAt, bulgeAt, curved: frame.shift > 0, space, along, look, shade, width, swellAt, start, point, pen })
   }
 }
@@ -537,6 +550,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
     haze: 0,
     gap: 0,
     subject: 0,
+    bead: 0,
     box(u0: number, u1: number, v0: number, v1: number) {
       let x0 = u0
       let x1 = u1
@@ -572,12 +586,14 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       look.haze = 0
       look.gap = 0
       look.subject = 0
+      look.bead = 0
       if (a === b || c === d) return 0
       const total = (s: Float64Array) => (s[d * row + b] - s[c * row + b] - s[d * row + a] + s[c * row + a]) / area
       if (map.rimSums) look.rim = total(map.rimSums)
       if (map.hazeSums) look.haze = total(map.hazeSums)
       if (map.gapSums) look.gap = total(map.gapSums)
       if (map.subjectSums) look.subject = total(map.subjectSums)
+      if (map.beadSums) look.bead = total(map.beadSums)
       return total(map.inkSums)
     },
     point(u: number, v: number) {
@@ -591,6 +607,7 @@ function reader(map: InkMap, at: { x: number; y: number; w: number; h: number },
       look.haze = map.haze ? blend(map.haze, x0, y0, fx, fy) : 0
       look.gap = map.gap ? blend(map.gap, x0, y0, fx, fy) : 0
       look.subject = map.subject ? blend(map.subject, x0, y0, fx, fy) : 0
+      look.bead = map.bead ? blend(map.bead, x0, y0, fx, fy) : 0
       return blend(map.ink, x0, y0, fx, fy)
     },
   }
